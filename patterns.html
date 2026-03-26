@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitMate - Free Patterns</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Manrope', 'sans-serif'] },
+          colors: {
+            brand: { dark: '#556B2F', darker: '#3D4E22', light: '#D4E8C2', gray: '#7A8C6E', bg: '#F5F5DC' }
+          },
+          boxShadow: { 'card': '0 4px 20px -2px rgba(85,107,47,0.05)' }
+        }
+      }
+    }
+  </script>
+  <!-- Supabase JS client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    body { font-family: 'Manrope', sans-serif; background-color: #F5F5DC; }
+    .pattern-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .pattern-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px -8px rgba(85,107,47,0.15); }
+    .pattern-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; image-rendering: pixelated; }
+    #modal { transition: opacity 0.2s; }
+    #modalInner { transition: transform 0.2s; }
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #556B2F; color: white; padding: 10px 20px;
+      border-radius: 999px; font-size: 14px; font-weight: 600;
+      z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    /* Masonry-ish with CSS columns */
+    .pattern-grid {
+      columns: 2;
+      column-gap: 20px;
+    }
+    @media (min-width: 640px) { .pattern-grid { columns: 3; } }
+    @media (min-width: 1024px) { .pattern-grid { columns: 4; } }
+    @media (min-width: 1280px) { .pattern-grid { columns: 5; } }
+    .pattern-card { break-inside: avoid; margin-bottom: 20px; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    .filter-btn.active { background: #556B2F; color: #D4E8C2; border-color: #556B2F; }
+  </style>
+</head>
+
+<body class="w-full min-h-screen text-brand-darker antialiased">
+<div id="toast"></div>
+
+<!-- Nav -->
+<nav class="fixed w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center h-20">
+      <a href="index.html" class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-dark flex items-center justify-center text-brand-light">
+          <i class="fa-solid fa-palette text-sm"></i>
+        </div>
+        <span class="text-xl font-bold text-brand-dark">KnitMate</span>
+      </a>
+      <div class="hidden md:flex items-center space-x-8">
+        <a href="index.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Home</a>
+        <a href="convert.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Convert Image</a>
+        <a href="design.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Design Colorwork</a>
+        <a href="patterns.html" class="text-sm font-medium text-brand-dark border-b-2 border-brand-dark pb-0.5">Free Patterns</a>
+      </div>
+      <div class="hidden md:flex items-center space-x-4">
+        <button class="text-sm font-medium text-brand-dark hover:text-brand-gray px-4 py-2">Log in</button>
+        <button class="bg-brand-dark text-white text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-brand-darker transition-all shadow-md">Share Pattern</button>
+      </div>
+      <button class="md:hidden text-brand-darker text-2xl"><i class="fa-solid fa-bars"></i></button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="pt-28 pb-12 bg-white border-b border-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-2xl mx-auto mb-8">
+      <h1 class="text-4xl font-extrabold text-brand-dark mb-3">Free Pattern Gallery</h1>
+      <p class="text-brand-gray">Explore community-created cross-stitch and colorwork patterns. Download, remix, and create.</p>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
+      <div class="relative flex-1">
+        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-brand-gray text-sm"></i>
+        <input type="text" id="searchInput" placeholder="Search patterns by name or tag…"
+          class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none text-sm font-medium">
+      </div>
+      <button id="filterToggleBtn"
+        class="flex items-center gap-2 px-5 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-brand-dark hover:border-brand-dark transition-all">
+        <i class="fa-solid fa-sliders"></i> Filters
+      </button>
+    </div>
+
+    <!-- Filter Panel -->
+    <div id="filterPanel" class="hidden max-w-3xl mx-auto mt-4 bg-gray-50 rounded-2xl p-5 border border-gray-200">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <!-- Colors filter -->
+        <div>
+          <label class="block text-xs font-semibold text-brand-gray mb-2">MAX COLORS</label>
+          <div class="flex flex-wrap gap-2">
+            <button class="filter-btn active px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="colors" data-val="all">Any</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="colors" data-val="5">≤5</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="colors" data-val="10">≤10</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="colors" data-val="20">≤20</button>
+          </div>
+        </div>
+        <!-- Size filter -->
+        <div>
+          <label class="block text-xs font-semibold text-brand-gray mb-2">GRID SIZE</label>
+          <div class="flex flex-wrap gap-2">
+            <button class="filter-btn active px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="size" data-val="all">Any</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="size" data-val="small">Small (≤40)</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="size" data-val="medium">Medium</button>
+            <button class="filter-btn px-3 py-1 rounded-full border border-gray-200 text-xs font-medium" data-filter="size" data-val="large">Large (100+)</button>
+          </div>
+        </div>
+        <!-- Sort -->
+        <div>
+          <label class="block text-xs font-semibold text-brand-gray mb-2">SORT BY</label>
+          <select id="sortSelect" class="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium focus:border-brand-dark outline-none bg-white">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="colors_asc">Fewest colors</option>
+            <option value="colors_desc">Most colors</option>
+            <option value="size_asc">Smallest grid</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Gallery -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <!-- Stats bar -->
+  <div class="flex items-center justify-between mb-6">
+    <p id="statsText" class="text-sm text-brand-gray font-medium">Loading patterns…</p>
+    <button id="uploadPatternBtn"
+      class="flex items-center gap-2 bg-brand-dark text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-brand-darker transition-all shadow-md">
+      <i class="fa-solid fa-plus"></i> Upload Pattern
+    </button>
+  </div>
+
+  <!-- Loading skeleton -->
+  <div id="skeletonGrid" class="pattern-grid">
+    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-3 bg-gray-200 rounded w-1/2"></div></div></div>
+    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-2/3"></div><div class="h-3 bg-gray-200 rounded w-1/3"></div></div></div>
+    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-4/5"></div><div class="h-3 bg-gray-200 rounded w-2/5"></div></div></div>
+    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-1/2"></div><div class="h-3 bg-gray-200 rounded w-1/4"></div></div></div>
+    <div class="hidden sm:block bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-3 bg-gray-200 rounded w-1/2"></div></div></div>
+    <div class="hidden lg:block bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div class="bg-gray-200 w-full aspect-square"></div><div class="p-4 space-y-2"><div class="h-4 bg-gray-200 rounded w-2/3"></div><div class="h-3 bg-gray-200 rounded w-1/3"></div></div></div>
+  </div>
+
+  <!-- Pattern grid -->
+  <div id="patternGrid" class="pattern-grid hidden"></div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="hidden text-center py-20">
+    <div class="w-20 h-20 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4">
+      <i class="fa-solid fa-shapes text-brand-dark text-3xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-brand-dark mb-2">No patterns found</h3>
+    <p class="text-brand-gray text-sm mb-6">Try adjusting your search or filters.</p>
+    <button id="clearFiltersBtn" class="border border-gray-200 text-brand-dark font-semibold px-6 py-2.5 rounded-full hover:border-brand-dark transition-all text-sm">
+      Clear filters
+    </button>
+  </div>
+
+  <!-- Error state -->
+  <div id="errorState" class="hidden text-center py-20">
+    <div class="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+      <i class="fa-solid fa-triangle-exclamation text-red-400 text-3xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-brand-dark mb-2">Could not load patterns</h3>
+    <p id="errorMsg" class="text-brand-gray text-sm mb-6">Supabase credentials not configured. Showing demo patterns instead.</p>
+    <button id="retryBtn" class="bg-brand-dark text-white font-semibold px-6 py-2.5 rounded-full hover:bg-brand-darker transition-all text-sm">
+      <i class="fa-solid fa-rotate mr-2"></i>Retry
+    </button>
+  </div>
+
+  <!-- Load more -->
+  <div id="loadMoreContainer" class="hidden text-center mt-10">
+    <button id="loadMoreBtn"
+      class="border-2 border-gray-200 text-brand-dark font-semibold px-10 py-3 rounded-full hover:border-brand-dark hover:text-brand-dark transition-all">
+      Load more patterns
+    </button>
+  </div>
+</main>
+
+<!-- Pattern Detail Modal -->
+<div id="modal" class="fixed inset-0 z-50 hidden bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="modalInner" class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <!-- Modal Header -->
+    <div class="flex items-start justify-between p-6 pb-0">
+      <div>
+        <h2 id="modalTitle" class="text-2xl font-bold text-brand-dark"></h2>
+        <p id="modalMeta" class="text-sm text-brand-gray mt-1"></p>
+      </div>
+      <button id="modalClose" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-brand-gray hover:bg-gray-200 transition-all flex-shrink-0 ml-4">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Canvas -->
+      <div>
+        <div class="bg-gray-50 rounded-2xl border border-gray-100 p-4 flex items-center justify-center" style="min-height:300px">
+          <canvas id="modalCanvas" style="max-width:100%;image-rendering:pixelated"></canvas>
+        </div>
+        <!-- Tags -->
+        <div id="modalTags" class="flex flex-wrap gap-2 mt-3"></div>
+      </div>
+
+      <!-- Legend & Actions -->
+      <div class="flex flex-col gap-4">
+        <!-- Quick stats -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-xs text-brand-gray mb-1">Grid Size</p>
+            <p id="modalSize" class="font-bold text-brand-dark text-sm"></p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-xs text-brand-gray mb-1">Colors</p>
+            <p id="modalColors" class="font-bold text-brand-dark text-sm"></p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-xs text-brand-gray mb-1">Stitches</p>
+            <p id="modalStitches" class="font-bold text-brand-dark text-sm"></p>
+          </div>
+        </div>
+
+        <!-- Color Legend -->
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-brand-dark mb-3">DMC Thread Legend</h4>
+          <div class="overflow-y-auto max-h-72">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-brand-gray border-b border-gray-100">
+                  <th class="pb-2">Swatch</th><th class="pb-2">DMC</th><th class="pb-2">Name</th>
+                  <th class="pb-2 text-right">Sts</th><th class="pb-2 text-right">Skeins</th>
+                </tr>
+              </thead>
+              <tbody id="modalLegend"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-3 pt-3 border-t border-gray-100">
+          <button id="modalDownloadBtn"
+            class="flex-1 bg-brand-dark text-white font-semibold py-3 rounded-xl hover:bg-brand-darker transition-all flex items-center justify-center gap-2 text-sm">
+            <i class="fa-solid fa-download"></i> Download PNG
+          </button>
+          <button id="modalEditBtn"
+            class="border border-gray-200 text-brand-dark font-semibold py-3 px-5 rounded-xl hover:border-brand-dark transition-all flex items-center gap-2 text-sm">
+            <i class="fa-solid fa-pen"></i> Edit
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" class="fixed inset-0 z-50 hidden bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-xl font-bold text-brand-dark">Upload Pattern</h2>
+      <button id="uploadModalClose" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-brand-gray hover:bg-gray-200">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+    <form id="uploadForm" class="space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-brand-gray mb-1 block">Pattern Name *</label>
+        <input type="text" id="uploadName" required placeholder="e.g. Nordic Snowflake"
+          class="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-medium focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-brand-gray mb-1 block">Tags (comma-separated)</label>
+        <input type="text" id="uploadTags" placeholder="e.g. geometric, winter, blue"
+          class="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-medium focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-brand-gray mb-1 block">Pattern Image *</label>
+        <label class="block border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-brand-dark transition-colors" id="uploadDropArea">
+          <input type="file" id="uploadFileInput" accept="image/*" class="hidden">
+          <i class="fa-solid fa-cloud-arrow-up text-brand-gray text-2xl mb-2 block"></i>
+          <p class="text-sm text-brand-dark font-medium" id="uploadDropText">Click to choose image</p>
+          <p class="text-xs text-brand-gray mt-1">PNG recommended (grid pattern)</p>
+        </label>
+      </div>
+      <div id="uploadPreviewWrap" class="hidden">
+        <canvas id="uploadPreviewCanvas" class="rounded-xl border border-gray-200 max-w-full"></canvas>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" id="uploadCancelBtn" class="flex-1 border border-gray-200 text-brand-dark font-semibold py-3 rounded-xl hover:bg-gray-50 text-sm">Cancel</button>
+        <button type="submit" id="uploadSubmitBtn" class="flex-1 bg-brand-dark text-white font-semibold py-3 rounded-xl hover:bg-brand-darker transition-all text-sm flex items-center justify-center gap-2">
+          <i class="fa-solid fa-upload"></i> Upload
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURATION — Replace with your actual Supabase credentials
+// ─────────────────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';        // e.g. https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const TABLE_NAME = 'patterns';
+const STORAGE_BUCKET = 'pattern-thumbnails';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DMC colors (simplified for pattern rendering – full set in convert.html)
+// ─────────────────────────────────────────────────────────────────────────────
+const DMC_MAP = {
+  'blanc':[255,255,255],'ecru':[240,234,218],'310':[0,0,0],'321':[192,22,30],
+  '666':[255,40,40],'816':[166,16,27],'900':[209,79,0],'947':[255,112,48],
+  '740':[255,136,0],'742':[255,196,68],'744':[255,239,147],'3820':[221,170,57],
+  '336':[26,61,120],'312':[44,97,147],'322':[80,136,182],'334':[119,168,204],
+  '813':[140,190,219],'827':[179,216,233],'3756':[232,247,255],
+  '700':[32,129,28],'702':[78,172,64],'703':[124,195,89],'911':[42,150,88],
+  '954':[134,201,164],'964':[156,216,212],'993':[162,216,200],
+  '208':[139,88,148],'210':[194,158,196],'211':[218,196,220],
+  '550':[86,28,98],'553':[145,87,149],'554':[205,160,203],
+  '415':[207,209,211],'318':[186,187,190],'414':[138,136,139],
+  '762':[232,233,234],'3799':[61,60,60],'317':[130,126,128],
+  '437':[218,183,138],'436':[198,159,107],'435':[176,128,76],
+  '434':[149,98,50],'433':[118,71,29],'801':[81,45,13],
+  '3371':[22,9,1],'938':[47,21,2],'898':[62,30,6],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Supabase client
+// ─────────────────────────────────────────────────────────────────────────────
+let supabase = null;
+let useSupabase = false;
+
+try {
+  if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    useSupabase = true;
+  }
+} catch(e) {
+  console.warn('Supabase init failed:', e);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let allPatterns = [];
+let filteredPatterns = [];
+let displayedCount = 0;
+const PAGE_SIZE = 12;
+let activeFilters = { colors: 'all', size: 'all' };
+let searchQuery = '';
+let sortOrder = 'newest';
+let currentModalPattern = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo patterns (shown when Supabase not configured)
+// ─────────────────────────────────────────────────────────────────────────────
+function generateDemoGrid(w, h, palette) {
+  const grid = [];
+  for (let y = 0; y < h; y++) {
+    const row = [];
+    for (let x = 0; x < w; x++) {
+      // Simple procedural pattern
+      const v = (Math.sin(x*0.5 + y*0.3) + Math.cos(x*0.3 - y*0.5)) * 0.5 + 0.5;
+      row.push(palette[Math.floor(v * palette.length) % palette.length]);
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+const DEMO_PATTERNS = [
+  { id:'d1', name:'Nordic Snowflake', width:40, height:40, color_count:4,
+    tags:['nordic','winter','geometric'],
+    created_at: new Date(Date.now()-86400000*2).toISOString(),
+    grid_data: generateDemoGrid(40,40,['blanc','336','312','762']),
+    thumbnail_url: null },
+  { id:'d2', name:'Spring Meadow', width:30, height:30, color_count:6,
+    tags:['floral','spring','colorful'],
+    created_at: new Date(Date.now()-86400000*5).toISOString(),
+    grid_data: generateDemoGrid(30,30,['700','702','954','321','744','blanc']),
+    thumbnail_url: null },
+  { id:'d3', name:'Geometric Diamonds', width:60, height:50, color_count:3,
+    tags:['geometric','minimal'],
+    created_at: new Date(Date.now()-86400000*7).toISOString(),
+    grid_data: generateDemoGrid(60,50,['310','816','blanc']),
+    thumbnail_url: null },
+  { id:'d4', name:'Ocean Waves', width:80, height:60, color_count:5,
+    tags:['ocean','blue','waves'],
+    created_at: new Date(Date.now()-86400000*10).toISOString(),
+    grid_data: generateDemoGrid(80,60,['336','334','813','827','3756']),
+    thumbnail_url: null },
+  { id:'d5', name:'Autumn Leaves', width:50, height:50, color_count:7,
+    tags:['autumn','nature','warm'],
+    created_at: new Date(Date.now()-86400000*14).toISOString(),
+    grid_data: generateDemoGrid(50,50,['900','947','740','742','437','898','blanc']),
+    thumbnail_url: null },
+  { id:'d6', name:'Lavender Fields', width:45, height:45, color_count:4,
+    tags:['floral','purple','soft'],
+    created_at: new Date(Date.now()-86400000*20).toISOString(),
+    grid_data: generateDemoGrid(45,45,['208','210','211','blanc']),
+    thumbnail_url: null },
+  { id:'d7', name:'Checkerboard Classic', width:20, height:20, color_count:2,
+    tags:['minimal','classic','beginner'],
+    created_at: new Date(Date.now()-86400000*25).toISOString(),
+    grid_data: generateDemoGrid(20,20,['310','blanc']),
+    thumbnail_url: null },
+  { id:'d8', name:'Botanical Vines', width:70, height:80, color_count:8,
+    tags:['botanical','green','detailed'],
+    created_at: new Date(Date.now()-86400000*30).toISOString(),
+    grid_data: generateDemoGrid(70,80,['700','702','703','911','954','437','801','blanc']),
+    thumbnail_url: null },
+  { id:'d9', name:'Sunrise Gradient', width:100, height:60, color_count:5,
+    tags:['landscape','sunrise','gradient'],
+    created_at: new Date(Date.now()-86400000*35).toISOString(),
+    grid_data: generateDemoGrid(100,60,['321','900','947','744','3756']),
+    thumbnail_url: null },
+  { id:'d10', name:'Folk Art Motif', width:35, height:35, color_count:6,
+    tags:['folk','traditional','colorful'],
+    created_at: new Date(Date.now()-86400000*40).toISOString(),
+    grid_data: generateDemoGrid(35,35,['321','700','312','744','553','blanc']),
+    thumbnail_url: null },
+  { id:'d11', name:'Minimal Lines', width:25, height:25, color_count:2,
+    tags:['minimal','beginner','geometric'],
+    created_at: new Date(Date.now()-86400000*45).toISOString(),
+    grid_data: generateDemoGrid(25,25,['3799','762']),
+    thumbnail_url: null },
+  { id:'d12', name:'Rainbow Burst', width:55, height:55, color_count:7,
+    tags:['rainbow','colorful','bold'],
+    created_at: new Date(Date.now()-86400000*50).toISOString(),
+    grid_data: generateDemoGrid(55,55,['321','947','744','700','334','553','blanc']),
+    thumbnail_url: null },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Thumbnail generation from grid_data
+// ─────────────────────────────────────────────────────────────────────────────
+function renderPatternToCanvas(gridData, targetCanvas, size=160) {
+  if (!gridData || !gridData.length) return;
+  const h = gridData.length, w = gridData[0].length;
+  const cell = Math.max(1, Math.floor(size / Math.max(w, h)));
+  targetCanvas.width = w * cell;
+  targetCanvas.height = h * cell;
+  const ctx = targetCanvas.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const colorId = gridData[y][x];
+      const rgb = DMC_MAP[colorId] || [200, 200, 200];
+      ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      ctx.fillRect(x*cell, y*cell, cell, cell);
+    }
+  }
+  return targetCanvas.toDataURL();
+}
+
+function getPatternThumb(pattern) {
+  if (pattern.thumbnail_url) return pattern.thumbnail_url;
+  if (!pattern._thumbData && pattern.grid_data) {
+    const c = document.createElement('canvas');
+    pattern._thumbData = renderPatternToCanvas(pattern.grid_data, c, 200);
+  }
+  return pattern._thumbData || null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Load patterns
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadPatterns() {
+  document.getElementById('skeletonGrid').classList.remove('hidden');
+  document.getElementById('patternGrid').classList.add('hidden');
+  document.getElementById('errorState').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+
+  if (useSupabase) {
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      allPatterns = data || [];
+    } catch(e) {
+      console.error('Supabase error:', e);
+      document.getElementById('errorMsg').textContent = `Database error: ${e.message}. Showing demo patterns.`;
+      allPatterns = DEMO_PATTERNS;
+      showErrorBanner();
+    }
+  } else {
+    // No Supabase config — show demo patterns
+    allPatterns = DEMO_PATTERNS;
+  }
+
+  document.getElementById('skeletonGrid').classList.add('hidden');
+  applyFiltersAndRender();
+}
+
+function showErrorBanner() {
+  document.getElementById('errorState').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filtering & Sorting
+// ─────────────────────────────────────────────────────────────────────────────
+function applyFiltersAndRender() {
+  const q = searchQuery.toLowerCase();
+  filteredPatterns = allPatterns.filter(p => {
+    // Search
+    if (q && !p.name.toLowerCase().includes(q) &&
+        !(p.tags||[]).some(t => t.toLowerCase().includes(q))) return false;
+    // Color filter
+    if (activeFilters.colors !== 'all' && p.color_count > parseInt(activeFilters.colors)) return false;
+    // Size filter
+    const maxDim = Math.max(p.width||0, p.height||0);
+    if (activeFilters.size === 'small' && maxDim > 40) return false;
+    if (activeFilters.size === 'medium' && (maxDim <= 40 || maxDim >= 100)) return false;
+    if (activeFilters.size === 'large' && maxDim < 100) return false;
+    return true;
+  });
+
+  // Sort
+  filteredPatterns.sort((a, b) => {
+    switch(sortOrder) {
+      case 'oldest': return new Date(a.created_at) - new Date(b.created_at);
+      case 'colors_asc': return (a.color_count||0) - (b.color_count||0);
+      case 'colors_desc': return (b.color_count||0) - (a.color_count||0);
+      case 'size_asc': return (a.width*a.height||0) - (b.width*b.height||0);
+      default: return new Date(b.created_at) - new Date(a.created_at); // newest
+    }
+  });
+
+  displayedCount = 0;
+  document.getElementById('patternGrid').innerHTML = '';
+  document.getElementById('patternGrid').classList.remove('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('loadMoreContainer').classList.add('hidden');
+
+  if (filteredPatterns.length === 0) {
+    document.getElementById('patternGrid').classList.add('hidden');
+    document.getElementById('emptyState').classList.remove('hidden');
+    document.getElementById('statsText').textContent = 'No patterns match your filters';
+    return;
+  }
+
+  document.getElementById('statsText').textContent =
+    `${filteredPatterns.length} pattern${filteredPatterns.length !== 1 ? 's' : ''}`;
+  loadMorePatterns();
+}
+
+function loadMorePatterns() {
+  const batch = filteredPatterns.slice(displayedCount, displayedCount + PAGE_SIZE);
+  batch.forEach(p => appendPatternCard(p));
+  displayedCount += batch.length;
+
+  if (displayedCount < filteredPatterns.length) {
+    document.getElementById('loadMoreContainer').classList.remove('hidden');
+  } else {
+    document.getElementById('loadMoreContainer').classList.add('hidden');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pattern Card
+// ─────────────────────────────────────────────────────────────────────────────
+function appendPatternCard(pattern) {
+  const card = document.createElement('div');
+  card.className = 'pattern-card bg-white rounded-2xl border border-gray-100 overflow-hidden cursor-pointer shadow-card';
+  card.addEventListener('click', () => openModal(pattern));
+
+  const thumbUrl = getPatternThumb(pattern);
+  const thumbHtml = thumbUrl
+    ? `<img src="${thumbUrl}" alt="${pattern.name}" class="pattern-thumb">`
+    : `<div class="pattern-thumb bg-gray-100 flex items-center justify-center">
+         <i class="fa-solid fa-image text-gray-300 text-3xl"></i>
+       </div>`;
+
+  const tagsHtml = (pattern.tags||[]).slice(0,3).map(t =>
+    `<span class="text-xs bg-gray-100 text-brand-gray px-2 py-0.5 rounded-full">${t}</span>`
+  ).join('');
+
+  const date = new Date(pattern.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+
+  card.innerHTML = `
+    <div class="overflow-hidden">${thumbHtml}</div>
+    <div class="p-4">
+      <h4 class="font-bold text-brand-dark text-sm leading-tight mb-1">${pattern.name}</h4>
+      <p class="text-xs text-brand-gray mb-2">${pattern.width||'?'} × ${pattern.height||'?'} sts · ${pattern.color_count||'?'} colors</p>
+      <div class="flex flex-wrap gap-1 mb-3">${tagsHtml}</div>
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-brand-gray">${date}</span>
+        <button class="text-xs font-semibold text-brand-dark hover:text-primary transition-colors flex items-center gap-1">
+          View <i class="fa-solid fa-arrow-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('patternGrid').appendChild(card);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal
+// ─────────────────────────────────────────────────────────────────────────────
+function openModal(pattern) {
+  currentModalPattern = pattern;
+  document.getElementById('modalTitle').textContent = pattern.name;
+  document.getElementById('modalSize').textContent = `${pattern.width} × ${pattern.height}`;
+  document.getElementById('modalColors').textContent = pattern.color_count || '—';
+  document.getElementById('modalStitches').textContent = ((pattern.width||0)*(pattern.height||0)).toLocaleString();
+  document.getElementById('modalMeta').textContent =
+    `Created ${new Date(pattern.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`;
+
+  // Tags
+  const tagsEl = document.getElementById('modalTags');
+  tagsEl.innerHTML = (pattern.tags||[]).map(t =>
+    `<span class="text-xs bg-brand-light text-brand-dark font-medium px-3 py-1 rounded-full">${t}</span>`
+  ).join('');
+
+  // Canvas
+  const mc = document.getElementById('modalCanvas');
+  if (pattern.grid_data) {
+    renderPatternToCanvas(pattern.grid_data, mc, 500);
+    mc.style.maxWidth = '100%';
+  }
+
+  // Legend
+  if (pattern.grid_data) buildModalLegend(pattern.grid_data);
+
+  document.getElementById('modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function buildModalLegend(gridData) {
+  const counts = {};
+  for (const row of gridData) {
+    for (const colorId of row) {
+      counts[colorId] = (counts[colorId]||0) + 1;
+    }
+  }
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const body = document.getElementById('modalLegend');
+  body.innerHTML = '';
+  sorted.forEach(([colorId, count]) => {
+    const rgb = DMC_MAP[colorId] || [180,180,180];
+    const skeins = Math.ceil(count/150);
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-gray-50 hover:bg-gray-50';
+    tr.innerHTML = `
+      <td class="py-2 pr-2"><div style="width:16px;height:16px;background:rgb(${rgb[0]},${rgb[1]},${rgb[2]});border:1px solid #e5e7eb;border-radius:3px"></div></td>
+      <td class="py-2 pr-2 font-bold text-brand-dark">${colorId}</td>
+      <td class="py-2 pr-2 text-brand-darker">${getDMCName(colorId)}</td>
+      <td class="py-2 pr-2 text-right">${count.toLocaleString()}</td>
+      <td class="py-2 text-right font-semibold text-brand-dark">${skeins}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function getDMCName(id) {
+  const names = {
+    'blanc':'White','ecru':'Ecru','310':'Black','321':'Red','666':'Bright Red',
+    '816':'Garnet','900':'Dark Burnt Orange','947':'Burnt Orange','740':'Tangerine',
+    '742':'Light Tangerine','744':'Pale Yellow','3820':'Dark Straw',
+    '336':'Navy Blue','312':'Very Dark Baby Blue','322':'Dark Baby Blue',
+    '334':'Medium Baby Blue','813':'Light Blue','827':'Very Light Blue','3756':'Ultra Very Light Baby Blue',
+    '700':'Bright Christmas Green','702':'Kelly Green','703':'Chartreuse',
+    '911':'Medium Emerald Green','954':'Nile Green','964':'Light Sea Green','993':'Very Light Aquamarine',
+    '208':'Very Dark Lavender','210':'Medium Lavender','211':'Light Lavender',
+    '550':'Very Dark Violet','553':'Violet','554':'Light Violet',
+    '415':'Pearl Gray','318':'Light Steel Gray','414':'Dark Steel Gray',
+    '762':'Very Light Pearl Gray','3799':'Very Dark Pewter','317':'Medium Pewter',
+    '437':'Light Tan','436':'Tan','435':'Very Light Brown',
+    '434':'Light Brown','433':'Medium Brown','801':'Dark Coffee Brown',
+    '3371':'Black Brown','938':'Ultra Dark Coffee Brown','898':'Very Dark Coffee Brown',
+  };
+  return names[id] || `DMC ${id}`;
+}
+
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+// Modal download
+document.getElementById('modalDownloadBtn').addEventListener('click', () => {
+  if (!currentModalPattern) return;
+  const mc = document.getElementById('modalCanvas');
+  const link = document.createElement('a');
+  link.download = `${currentModalPattern.name.replace(/\s+/g,'-').toLowerCase()}.png`;
+  link.href = mc.toDataURL('image/png');
+  link.click();
+  showToast('Pattern downloaded!');
+});
+
+// Modal edit — open in design tool
+document.getElementById('modalEditBtn').addEventListener('click', () => {
+  showToast('Opening in design tool…');
+  setTimeout(() => window.location.href = 'design.html', 800);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload Modal
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('uploadPatternBtn').addEventListener('click', () => {
+  document.getElementById('uploadModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+});
+document.getElementById('uploadModalClose').addEventListener('click', closeUploadModal);
+document.getElementById('uploadCancelBtn').addEventListener('click', closeUploadModal);
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.add('hidden');
+  document.body.style.overflow = '';
+  document.getElementById('uploadForm').reset();
+  document.getElementById('uploadPreviewWrap').classList.add('hidden');
+  document.getElementById('uploadDropText').textContent = 'Click to choose image';
+}
+
+// File preview
+document.getElementById('uploadFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('uploadDropText').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const pc = document.getElementById('uploadPreviewCanvas');
+      const maxW = 300;
+      const scale = Math.min(1, maxW / img.width);
+      pc.width = img.width * scale;
+      pc.height = img.height * scale;
+      pc.getContext('2d').drawImage(img, 0, 0, pc.width, pc.height);
+      document.getElementById('uploadPreviewWrap').classList.remove('hidden');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('uploadForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('uploadName').value.trim();
+  const tagsRaw = document.getElementById('uploadTags').value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
+  const file = document.getElementById('uploadFileInput').files[0];
+  if (!name) { showToast('Please enter a pattern name.'); return; }
+
+  const btn = document.getElementById('uploadSubmitBtn');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading…';
+  btn.disabled = true;
+
+  try {
+    if (useSupabase && file) {
+      // Upload thumbnail
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from(STORAGE_BUCKET).upload(fileName, file);
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(STORAGE_BUCKET).getPublicUrl(fileName);
+
+      // Parse grid from image
+      const gridData = await imageToGrid(file, 50, 50);
+
+      // Insert into DB
+      const { error: dbError } = await supabase.from(TABLE_NAME).insert([{
+        name, tags,
+        width: gridData[0].length,
+        height: gridData.length,
+        color_count: new Set(gridData.flat()).size,
+        grid_data: gridData,
+        thumbnail_url: publicUrl,
+        created_at: new Date().toISOString(),
+      }]);
+      if (dbError) throw dbError;
+
+      showToast('Pattern uploaded!');
+      closeUploadModal();
+      loadPatterns();
+    } else {
+      // Demo mode: add locally
+      const gridData = file ? await imageToGrid(file, 50, 50) : generateDemoGrid(30,30,['310','blanc']);
+      const newPattern = {
+        id: 'u' + Date.now(),
+        name, tags,
+        width: gridData[0].length,
+        height: gridData.length,
+        color_count: new Set(gridData.flat()).size,
+        grid_data: gridData,
+        thumbnail_url: null,
+        created_at: new Date().toISOString(),
+      };
+      allPatterns.unshift(newPattern);
+      showToast('Pattern added! (demo mode — not saved to database)');
+      closeUploadModal();
+      applyFiltersAndRender();
+    }
+  } catch(err) {
+    showToast('Upload failed: ' + err.message);
+  } finally {
+    btn.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload';
+    btn.disabled = false;
+  }
+});
+
+async function imageToGrid(file, targetW, targetH) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = targetW; c.height = targetH;
+        c.getContext('2d').drawImage(img, 0, 0, targetW, targetH);
+        const data = c.getContext('2d').getImageData(0,0,targetW,targetH).data;
+        // Simple quantize to nearest DMC ID
+        const grid = [];
+        for (let y = 0; y < targetH; y++) {
+          const row = [];
+          for (let x = 0; x < targetW; x++) {
+            const i = (y*targetW+x)*4;
+            const r=data[i], g=data[i+1], b=data[i+2];
+            row.push(nearestDMCKey(r,g,b));
+          }
+          grid.push(row);
+        }
+        resolve(grid);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function nearestDMCKey(r,g,b) {
+  let best='310', bestDist=Infinity;
+  for (const [id, [dr,dg,db]] of Object.entries(DMC_MAP)) {
+    const d = (r-dr)**2+(g-dg)**2+(b-db)**2;
+    if (d < bestDist) { bestDist=d; best=id; }
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filters & Search
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('filterToggleBtn').addEventListener('click', () => {
+  const panel = document.getElementById('filterPanel');
+  panel.classList.toggle('hidden');
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filterType = btn.dataset.filter;
+    document.querySelectorAll(`.filter-btn[data-filter="${filterType}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilters[filterType] = btn.dataset.val;
+    applyFiltersAndRender();
+  });
+});
+
+document.getElementById('sortSelect').addEventListener('change', e => {
+  sortOrder = e.target.value;
+  applyFiltersAndRender();
+});
+
+let searchDebounce;
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    searchQuery = e.target.value;
+    applyFiltersAndRender();
+  }, 300);
+});
+
+document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  activeFilters = { colors: 'all', size: 'all' };
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn[data-val="all"]').forEach(b => b.classList.add('active'));
+  sortOrder = 'newest';
+  document.getElementById('sortSelect').value = 'newest';
+  applyFiltersAndRender();
+});
+
+document.getElementById('loadMoreBtn').addEventListener('click', loadMorePatterns);
+document.getElementById('retryBtn').addEventListener('click', loadPatterns);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+loadPatterns();
+</script>
+</body>
+</html>

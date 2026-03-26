@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitMate - Convert Image to Pattern</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Manrope', 'sans-serif'] },
+          colors: {
+            brand: {
+              dark: '#556B2F', darker: '#3D4E22',
+              light: '#D4E8C2', gray: '#7A8C6E', bg: '#F5F5DC'
+            }
+          },
+          boxShadow: {
+            'soft': '0 10px 40px -10px rgba(0,0,0,0.08)',
+            'card': '0 4px 20px -2px rgba(85,107,47,0.05)',
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    body { font-family: 'Manrope', sans-serif; background-color: #F5F5DC; }
+    .gradient-text {
+      background: linear-gradient(135deg, #556B2F 0%, #3D4E22 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .pattern-bg {
+      background-image: radial-gradient(#D4E8C2 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    #canvasWrapper { overflow: auto; cursor: crosshair; }
+    #patternCanvas { display: block; image-rendering: pixelated; }
+    #tooltip {
+      position: fixed; pointer-events: none; z-index: 100;
+      background: rgba(85,107,47,0.95); color: white;
+      padding: 6px 10px; border-radius: 8px; font-size: 12px;
+      line-height: 1.5; white-space: nowrap; display: none;
+    }
+    .legend-row:hover { background-color: #f0fdf4; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #999; }
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #556B2F; color: white; padding: 10px 20px;
+      border-radius: 999px; font-size: 14px; font-weight: 600;
+      z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+
+<body class="w-full min-h-screen text-brand-darker antialiased overflow-x-hidden">
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Navigation -->
+<nav class="fixed w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center h-20">
+      <a href="index.html" class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-dark flex items-center justify-center text-brand-light">
+          <i class="fa-solid fa-palette text-sm"></i>
+        </div>
+        <span class="text-xl font-bold text-brand-dark">KnitMate</span>
+      </a>
+      <div class="hidden md:flex items-center space-x-8">
+        <a href="index.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Home</a>
+        <a href="convert.html" class="text-sm font-medium text-brand-dark border-b-2 border-brand-dark pb-0.5">Convert Image</a>
+        <a href="design.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Design Colorwork</a>
+        <a href="patterns.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Free Patterns</a>
+      </div>
+      <div class="hidden md:flex items-center space-x-4">
+        <button class="text-sm font-medium text-brand-dark hover:text-brand-gray px-4 py-2">Log in</button>
+        <button class="bg-brand-dark text-white text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-brand-darker transition-all shadow-md">Start Converting</button>
+      </div>
+      <button class="md:hidden text-brand-darker text-2xl">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- Main Workspace -->
+<main class="pt-24 pb-12 w-full min-h-screen flex flex-col md:flex-row gap-6 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+
+  <!-- Sidebar Controls -->
+  <aside class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-white rounded-2xl shadow-card p-6 border border-gray-100 h-fit md:sticky top-28">
+    <h2 class="text-xl font-bold text-brand-dark mb-6">Pattern Settings</h2>
+    <form class="space-y-6" id="patternForm">
+
+      <!-- Image Upload -->
+      <div class="space-y-3">
+        <label class="block text-sm font-semibold text-brand-darker">Source Image</label>
+        <label class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-brand-dark transition-colors cursor-pointer bg-gray-50 group block" id="uploadArea">
+          <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" id="imageInput">
+          <div class="w-12 h-12 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-cloud-arrow-up text-brand-dark"></i>
+          </div>
+          <p class="text-sm font-medium text-brand-dark" id="uploadText">Click to upload or drag &amp; drop</p>
+          <p class="text-xs text-brand-gray mt-1">PNG, JPG up to 10MB</p>
+        </label>
+        <!-- Preview thumbnail -->
+        <div id="uploadPreview" class="hidden">
+          <img id="uploadThumb" class="w-full h-32 object-contain rounded-lg border border-gray-200 bg-gray-50">
+        </div>
+      </div>
+
+      <!-- Dimensions with aspect ratio lock -->
+      <div class="space-y-3">
+        <label class="block text-sm font-semibold text-brand-darker">Grid Dimensions (Stitches)</label>
+        <div class="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+          <div>
+            <label class="text-xs text-brand-gray mb-1 block">Width</label>
+            <input type="number" id="gridWidth" value="80" min="10" max="300"
+              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
+          </div>
+          <div class="flex flex-col items-center pb-0.5">
+            <button type="button" id="lockAspectBtn" title="Lock aspect ratio"
+              class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-brand-gray hover:border-brand-dark hover:text-brand-dark transition-all">
+              <i id="lockIcon" class="fa-solid fa-link text-xs"></i>
+            </button>
+          </div>
+          <div>
+            <label class="text-xs text-brand-gray mb-1 block">Height</label>
+            <input type="number" id="gridHeight" value="68" min="10" max="300"
+              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
+          </div>
+        </div>
+        <p class="text-xs text-brand-gray" id="aspectNote">Aspect ratio: free</p>
+      </div>
+
+      <!-- Grid Ratio -->
+      <div class="space-y-3">
+        <label class="block text-sm font-semibold text-brand-darker">Stitch Ratio</label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="relative cursor-pointer">
+            <input type="radio" name="grid_type" value="square" checked class="peer sr-only">
+            <div class="p-3 rounded-lg border border-gray-200 peer-checked:border-brand-dark peer-checked:bg-brand-light/30 text-center transition-all">
+              <i class="fa-regular fa-square mb-1 text-brand-dark block"></i>
+              <div class="text-xs font-medium text-brand-dark">Square (1:1)</div>
+            </div>
+          </label>
+          <label class="relative cursor-pointer">
+            <input type="radio" name="grid_type" value="knit" class="peer sr-only">
+            <div class="p-3 rounded-lg border border-gray-200 peer-checked:border-brand-dark peer-checked:bg-brand-light/30 text-center transition-all">
+              <i class="fa-regular fa-rectangle-list mb-1 text-brand-dark block"></i>
+              <div class="text-xs font-medium text-brand-dark">Knit (4:5)</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Gauge -->
+      <div class="space-y-3">
+        <label class="block text-sm font-semibold text-brand-darker">Gauge (per 10cm / 4")</label>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-brand-gray mb-1 block">Stitches</label>
+            <input type="number" id="gaugeStitches" value="20" min="1"
+              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
+          </div>
+          <div>
+            <label class="text-xs text-brand-gray mb-1 block">Rows</label>
+            <input type="number" id="gaugeRows" value="26" min="1"
+              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
+          </div>
+        </div>
+      </div>
+
+      <!-- Max Colors -->
+      <div class="space-y-3">
+        <label class="block text-sm font-semibold text-brand-darker">
+          Max DMC Colors: <span id="maxColorsVal" class="text-brand-dark">15</span>
+        </label>
+        <input type="range" id="maxColors" value="15" min="2" max="40" step="1"
+          class="w-full accent-brand-dark">
+        <p class="text-xs text-brand-gray">Limits the number of DMC thread colors used</p>
+      </div>
+
+      <div class="pt-4 border-t border-gray-100">
+        <button type="button" id="generateBtn"
+          class="w-full bg-brand-dark text-white font-semibold py-3.5 rounded-xl hover:bg-brand-darker transition-all shadow-md flex items-center justify-center gap-2">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          Generate Pattern
+        </button>
+      </div>
+    </form>
+  </aside>
+
+  <!-- Right Column -->
+  <div class="flex-1 flex flex-col gap-6">
+
+    <!-- Top Controls -->
+    <div class="bg-white rounded-2xl shadow-card p-4 border border-gray-100 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <!-- View toggle -->
+        <div class="flex bg-gray-100 rounded-lg p-1">
+          <button id="viewPatternBtn" class="px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-semibold text-brand-dark">Pattern</button>
+          <button id="viewOriginalBtn" class="px-4 py-1.5 rounded-md text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Original</button>
+        </div>
+        <!-- Grid toggle -->
+        <button id="gridToggleBtn" title="Toggle grid lines"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
+          <i class="fa-solid fa-border-all text-xs"></i> Grid
+        </button>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="zoomOutBtn" class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all">
+          <i class="fa-solid fa-magnifying-glass-minus text-xs"></i>
+        </button>
+        <span id="zoomLabel" class="text-sm font-medium w-12 text-center">100%</span>
+        <button id="zoomInBtn" class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all">
+          <i class="fa-solid fa-magnifying-glass-plus text-xs"></i>
+        </button>
+        <div class="w-px h-6 bg-gray-200"></div>
+        <button id="exportPngBtn" class="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-image"></i> PNG
+        </button>
+        <button id="exportPdfBtn" class="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-file-pdf"></i> PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Canvas Area -->
+    <div class="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden relative flex items-center justify-center pattern-bg min-h-[500px]" id="canvasOuter">
+
+      <!-- Empty state -->
+      <div id="emptyState" class="text-center p-8">
+        <div class="w-20 h-20 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4">
+          <i class="fa-solid fa-image text-brand-dark text-3xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-brand-dark mb-2">No pattern yet</h3>
+        <p class="text-brand-gray text-sm">Upload an image and click <strong>Generate Pattern</strong> to get started.</p>
+      </div>
+
+      <!-- Loading state -->
+      <div id="loadingState" class="hidden text-center p-8">
+        <div class="w-20 h-20 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4 animate-pulse">
+          <i class="fa-solid fa-wand-magic-sparkles text-brand-dark text-3xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-brand-dark mb-2">Generating pattern…</h3>
+        <p class="text-brand-gray text-sm">Matching colors to DMC palette</p>
+      </div>
+
+      <!-- Pattern view -->
+      <div id="patternContainer" class="hidden w-full h-full p-6 flex items-start justify-center">
+        <div id="canvasWrapper" class="relative max-w-full">
+          <div id="patternGrid" style="transform-origin: top left;">
+            <canvas id="patternCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Original image view -->
+      <div id="originalContainer" class="hidden relative w-full h-full p-8 flex items-center justify-center">
+        <img id="originalImage" src="" alt="Original" class="max-h-[550px] rounded-xl shadow-md object-contain">
+      </div>
+
+      <!-- Summary panel -->
+      <div id="summaryPanel" class="hidden absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-4 w-56">
+        <h4 class="text-sm font-bold text-brand-dark mb-3">Pattern Summary</h4>
+        <div class="space-y-2 text-xs">
+          <div class="flex justify-between border-b border-gray-100 pb-1">
+            <span class="text-brand-gray">Size</span>
+            <span id="summarySize" class="font-semibold text-brand-darker">—</span>
+          </div>
+          <div class="flex justify-between border-b border-gray-100 pb-1">
+            <span class="text-brand-gray">DMC Colors</span>
+            <span id="summaryColors" class="font-semibold text-brand-darker">—</span>
+          </div>
+          <div class="flex justify-between pb-1">
+            <span class="text-brand-gray">Est. Size</span>
+            <span id="summaryEst" class="font-semibold text-brand-darker">—</span>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-gray-100">
+          <p class="text-xs text-brand-gray mb-2">Colors used</p>
+          <div id="colorSwatches" class="flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Color Legend -->
+    <div id="legendContainer" class="hidden bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-brand-dark">DMC Thread Legend</h3>
+        <span id="legendColorCount" class="text-xs text-brand-gray font-medium bg-gray-100 px-2.5 py-1 rounded-full"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-brand-gray border-b border-gray-100">
+              <th class="pb-3 font-semibold w-8">#</th>
+              <th class="pb-3 font-semibold">Swatch</th>
+              <th class="pb-3 font-semibold">DMC No.</th>
+              <th class="pb-3 font-semibold">Color Name</th>
+              <th class="pb-3 font-semibold text-right">Stitches</th>
+              <th class="pb-3 font-semibold text-right">Skeins</th>
+            </tr>
+          </thead>
+          <tbody id="legendBody"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-brand-gray mt-4">* Skein estimate based on ~150 stitches per skein at 14-count Aida with 2 strands.</p>
+    </div>
+
+  </div><!-- /right column -->
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DMC THREAD COLOR DATABASE  (454 colors)
+// Format: [dmcNumber, colorName, r, g, b]
+// ─────────────────────────────────────────────────────────────────────────────
+const DMC_RAW = [
+  // Whites & Creams
+  ['blanc','White',255,255,255],
+  ['B5200','Snow White',255,255,255],
+  ['ecru','Ecru',240,234,218],
+  ['3865','Winter White',245,243,239],
+  ['3823','Ultra Pale Yellow',255,253,220],
+  ['746','Off White',255,251,223],
+  // Yellows
+  ['3078','Very Light Golden Yellow',253,250,185],
+  ['727','Very Light Topaz',255,243,168],
+  ['726','Light Topaz',255,229,112],
+  ['725','Medium Light Topaz',253,212,82],
+  ['3820','Dark Straw',221,170,57],
+  ['3821','Straw',240,193,86],
+  ['3822','Light Straw',247,216,138],
+  ['744','Pale Yellow',255,239,147],
+  ['743','Medium Yellow',255,220,96],
+  ['742','Light Tangerine',255,196,68],
+  ['741','Medium Tangerine',255,163,27],
+  ['740','Tangerine',255,136,0],
+  ['972','Deep Canary',255,179,0],
+  ['971','Pumpkin',255,136,0],
+  ['970','Light Pumpkin',255,163,43],
+  ['947','Burnt Orange',255,112,48],
+  ['946','Medium Burnt Orange',255,93,26],
+  ['900','Dark Burnt Orange',209,79,0],
+  ['608','Bright Orange',255,89,31],
+  ['606','Bright Orange-Red',255,48,18],
+  // Reds
+  ['666','Bright Red',255,40,40],
+  ['321','Red',192,22,30],
+  ['304','Medium Red',170,18,27],
+  ['816','Garnet',166,16,27],
+  ['815','Medium Garnet',148,10,23],
+  ['814','Dark Garnet',124,4,16],
+  ['498','Dark Red',180,12,23],
+  ['347','Very Dark Salmon',197,65,57],
+  ['349','Dark Coral',207,67,55],
+  ['350','Medium Coral',222,92,79],
+  ['351','Coral',230,118,103],
+  ['352','Light Coral',243,150,135],
+  ['353','Peach',253,182,166],
+  ['3712','Medium Salmon',247,135,122],
+  ['3328','Dark Salmon',220,107,97],
+  ['760','Salmon',245,158,144],
+  ['761','Light Salmon',252,190,181],
+  // Pinks
+  ['3706','Medium Melon',255,165,158],
+  ['3705','Dark Melon',255,127,119],
+  ['3708','Light Melon',255,193,189],
+  ['3716','Very Light Dusty Rose',255,196,202],
+  ['3326','Light Rose',251,168,177],
+  ['899','Medium Rose',236,135,148],
+  ['335','Rose',239,93,114],
+  ['309','Deep Rose',210,62,83],
+  ['326','Very Dark Rose',179,37,60],
+  ['777','Very Dark Raspberry',140,28,46],
+  ['3350','Ultra Dark Dusty Rose',194,49,78],
+  ['3354','Light Dusty Rose',222,167,175],
+  ['3733','Dusty Rose',217,138,149],
+  ['3731','Very Dark Dusty Rose',205,107,122],
+  ['3727','Light Antique Mauve',215,173,182],
+  ['316','Medium Antique Mauve',183,135,147],
+  ['3726','Dark Antique Mauve',160,109,125],
+  ['315','Medium Dark Antique Mauve',137,90,106],
+  ['3802','Very Dark Antique Mauve',112,70,82],
+  ['778','Very Light Antique Mauve',225,194,200],
+  ['224','Very Light Shell Pink',240,194,189],
+  ['223','Light Shell Pink',209,149,143],
+  ['222','Dark Shell Pink',172,95,93],
+  ['221','Very Dark Shell Pink',134,63,65],
+  ['225','Ultra Very Light Shell Pink',248,215,210],
+  // Purples & Violets
+  ['3743','Very Light Antique Violet',218,213,226],
+  ['3042','Light Antique Violet',181,165,183],
+  ['3041','Medium Antique Violet',157,134,161],
+  ['3740','Dark Antique Violet',113,92,115],
+  ['211','Light Lavender',218,196,220],
+  ['210','Medium Lavender',194,158,196],
+  ['209','Dark Lavender',164,119,171],
+  ['208','Very Dark Lavender',139,88,148],
+  ['3746','Dark Blue Violet',120,106,163],
+  ['333','Very Dark Blue Violet',82,72,117],
+  ['327','Dark Violet',104,46,110],
+  ['3837','Ultra Dark Lavender',108,66,128],
+  ['550','Very Dark Violet',86,28,98],
+  ['553','Violet',145,87,149],
+  ['554','Light Violet',205,160,203],
+  ['552','Medium Violet',118,60,124],
+  ['3836','Light Grape',200,169,200],
+  ['3835','Medium Grape',171,131,172],
+  ['3834','Dark Grape',130,85,131],
+  // Blues
+  ['3756','Ultra Very Light Baby Blue',232,247,255],
+  ['747','Very Light Sky Blue',212,242,247],
+  ['3755','Baby Blue',158,194,222],
+  ['334','Medium Baby Blue',119,168,204],
+  ['322','Dark Baby Blue',80,136,182],
+  ['312','Very Dark Baby Blue',44,97,147],
+  ['336','Navy Blue',26,61,120],
+  ['823','Dark Navy Blue',22,39,97],
+  ['939','Very Dark Navy Blue',14,26,73],
+  ['3750','Very Dark Antique Blue',38,66,100],
+  ['3753','Ultra Very Light Antique Blue',214,228,236],
+  ['3752','Very Light Antique Blue',181,203,218],
+  ['932','Light Antique Blue',146,175,195],
+  ['931','Medium Antique Blue',105,146,169],
+  ['930','Dark Antique Blue',69,105,132],
+  ['3760','Medium Wedgewood',55,128,164],
+  ['517','Dark Wedgewood',41,112,149],
+  ['518','Light Wedgewood',72,155,185],
+  ['519','Sky Blue',107,183,210],
+  ['3761','Light Sky Blue',151,210,227],
+  ['827','Very Light Blue',179,216,233],
+  ['813','Light Blue',140,190,219],
+  ['826','Medium Blue',98,159,202],
+  ['825','Dark Blue',59,122,170],
+  ['824','Very Dark Blue',39,95,146],
+  ['803','Ultra Very Dark Baby Blue',25,51,101],
+  ['791','Very Dark Cornflower Blue',59,67,119],
+  ['792','Dark Cornflower Blue',76,88,147],
+  ['793','Medium Cornflower Blue',100,114,168],
+  ['794','Light Cornflower Blue',139,154,195],
+  ['3807','Cornflower Blue',87,98,146],
+  ['340','Medium Blue Violet',155,150,190],
+  ['341','Light Blue Violet',180,181,211],
+  ['155','Medium Dark Blue Violet',133,130,170],
+  ['156','Medium Light Blue Violet',158,170,201],
+  ['157','Very Light Cornflower Blue',183,194,219],
+  ['3840','Light Lavender Blue',172,190,220],
+  ['3839','Medium Lavender Blue',141,160,201],
+  ['3838','Dark Lavender Blue',102,125,173],
+  ['3747','Very Light Blue Violet',209,210,231],
+  // Greens
+  ['3819','Light Moss Green',219,229,102],
+  ['3817','Light Celadon Green',171,208,187],
+  ['3816','Celadon Green',124,180,157],
+  ['3815','Dark Celadon Green',77,140,116],
+  ['504','Very Light Blue Green',193,219,208],
+  ['503','Medium Blue Green',157,196,181],
+  ['502','Blue Green',115,167,151],
+  ['501','Dark Blue Green',77,135,118],
+  ['500','Very Dark Blue Green',45,96,81],
+  ['993','Very Light Aquamarine',162,216,200],
+  ['992','Light Aquamarine',115,194,173],
+  ['3814','Aquamarine',66,166,146],
+  ['3813','Light Blue Green',177,212,198],
+  ['3812','Very Dark Sea Green',43,142,124],
+  ['561','Very Dark Jade',27,107,88],
+  ['562','Medium Jade',64,142,113],
+  ['563','Light Jade',127,181,156],
+  ['564','Very Light Jade',173,210,191],
+  ['943','Medium Aquamarine',64,156,130],
+  ['3808','Ultra Very Dark Turquoise',32,101,102],
+  ['3847','Dark Teal Green',39,110,105],
+  ['3848','Medium Teal Green',55,131,125],
+  ['3849','Light Teal Green',73,163,155],
+  ['959','Medium Sea Green',89,187,178],
+  ['958','Dark Sea Green',52,169,161],
+  ['964','Light Sea Green',156,216,212],
+  ['954','Nile Green',134,201,164],
+  ['913','Medium Nile Green',102,183,134],
+  ['912','Light Emerald Green',76,168,108],
+  ['911','Medium Emerald Green',42,150,88],
+  ['910','Dark Emerald Green',7,131,71],
+  ['909','Very Dark Emerald Green',0,111,58],
+  ['703','Chartreuse',124,195,89],
+  ['702','Kelly Green',78,172,64],
+  ['701','Light Christmas Green',55,152,44],
+  ['700','Bright Christmas Green',32,129,28],
+  ['699','Christmas Green',3,107,11],
+  ['472','Ultra Light Avocado Green',212,228,151],
+  ['471','Very Light Avocado Green',190,210,124],
+  ['470','Light Avocado Green',158,189,92],
+  ['469','Avocado Green',124,162,60],
+  ['937','Medium Avocado Green',98,138,38],
+  ['936','Very Dark Avocado Green',76,107,25],
+  ['935','Dark Avocado Green',63,88,19],
+  ['934','Black Avocado Green',46,66,12],
+  ['3364','Pine Green',112,157,98],
+  ['3363','Medium Pine Green',86,134,72],
+  ['3362','Dark Pine Green',61,103,47],
+  ['3347','Medium Yellow Green',135,177,94],
+  ['3346','Hunter Green',88,142,68],
+  ['3345','Dark Hunter Green',50,109,39],
+  ['895','Very Dark Hunter Green',24,77,20],
+  ['319','Very Dark Pistachio Green',32,91,40],
+  ['367','Dark Pistachio Green',76,122,70],
+  ['368','Light Pistachio Green',139,180,132],
+  ['320','Medium Pistachio Green',102,147,93],
+  ['369','Very Light Pistachio Green',189,223,180],
+  ['164','Light Forest Green',170,206,158],
+  ['163','Medium Celadon Green',98,164,128],
+  ['162','Ultra Very Light Blue Green',205,230,220],
+  ['989','Forest Green',115,166,105],
+  ['988','Medium Forest Green',90,145,80],
+  ['987','Dark Forest Green',63,120,55],
+  ['986','Very Dark Forest Green',40,90,34],
+  ['166','Medium Light Moss Green',186,204,80],
+  ['165','Very Light Moss Green',226,237,151],
+  ['3851','Bright Green',60,177,150],
+  // Yellows-Greens
+  ['772','Very Light Yellow Green',220,235,187],
+  ['3348','Light Yellow Green',196,220,154],
+  ['3347','Medium Yellow Green',135,177,94], // dup - already listed but will be deduped
+  ['734','Light Olive Green',172,168,90],
+  ['733','Medium Olive Green',151,145,63],
+  ['732','Olive Green',119,113,34],
+  ['731','Dark Olive Green',96,91,14],
+  ['730','Very Dark Olive Green',74,71,0],
+  ['3053','Green Gray',148,162,124],
+  ['3052','Medium Green Gray',120,134,96],
+  ['3051','Dark Green Gray',82,95,61],
+  ['524','Very Light Fern Green',186,196,162],
+  ['523','Light Fern Green',157,166,130],
+  ['522','Fern Green',128,136,100],
+  ['520','Dark Fern Green',87,97,62],
+  // Browns & Tans
+  ['677','Very Light Old Gold',238,229,186],
+  ['676','Light Old Gold',226,208,153],
+  ['729','Medium Old Gold',197,170,106],
+  ['680','Dark Old Gold',158,122,50],
+  ['3047','Light Yellow Beige',232,219,184],
+  ['3046','Medium Yellow Beige',212,190,143],
+  ['3045','Dark Yellow Beige',178,149,96],
+  ['3827','Pale Golden Brown',242,193,128],
+  ['977','Light Golden Brown',229,162,83],
+  ['976','Medium Golden Brown',202,136,58],
+  ['975','Dark Golden Brown',163,101,24],
+  ['3826','Golden Brown',180,124,61],
+  ['402','Very Light Mahogany',251,183,141],
+  ['3776','Light Mahogany',211,140,93],
+  ['301','Medium Mahogany',176,102,53],
+  ['400','Dark Mahogany',138,70,26],
+  ['420','Dark Hazelnut Brown',167,110,59],
+  ['869','Very Dark Hazelnut Brown',122,77,29],
+  ['422','Light Hazelnut Brown',197,158,106],
+  ['3864','Light Mocha Beige',211,192,168],
+  ['3863','Medium Mocha Beige',186,159,128],
+  ['3862','Dark Mocha Beige',150,118,86],
+  ['3861','Light Cocoa',174,145,118],
+  ['3860','Cocoa',137,103,79],
+  ['632','Ultra Very Dark Desert Sand',136,83,53],
+  ['3773','Medium Desert Sand',208,161,125],
+  ['3772','Very Dark Desert Sand',166,116,80],
+  ['3771','Ultra Very Light Terra Cotta',244,193,170],
+  ['3770','Very Light Tawny',249,218,195],
+  ['945','Tawny',246,200,166],
+  ['951','Light Tawny',248,218,190],
+  ['3856','Ultra Very Light Mahogany',252,217,192],
+  ['754','Light Peach',245,200,183],
+  ['758','Very Light Terra Cotta',235,172,150],
+  ['3830','Terra Cotta',180,101,78],
+  ['356','Medium Terra Cotta',195,117,93],
+  ['3778','Light Terra Cotta',216,146,122],
+  ['355','Dark Terra Cotta',160,84,58],
+  ['407','Medium Desert Sand',194,148,114],
+  ['739','Ultra Very Light Tan',251,235,209],
+  ['738','Very Light Tan',242,220,186],
+  ['437','Light Tan',218,183,138],
+  ['436','Tan',198,159,107],
+  ['435','Very Light Brown',176,128,76],
+  ['434','Light Brown',149,98,50],
+  ['433','Medium Brown',118,71,29],
+  ['801','Dark Coffee Brown',81,45,13],
+  ['898','Very Dark Coffee Brown',62,30,6],
+  ['938','Ultra Dark Coffee Brown',47,21,2],
+  ['3371','Black Brown',22,9,1],
+  ['3781','Dark Mocha Brown',100,74,53],
+  ['3782','Light Mocha Brown',201,181,156],
+  ['611','Drab Brown',152,127,82],
+  ['612','Light Drab Brown',183,159,111],
+  ['610','Very Dark Drab Brown',111,88,50],
+  ['3857','Dark Rosewood',102,43,37],
+  ['3858','Medium Rosewood',155,82,74],
+  ['3859','Light Rosewood',193,148,137],
+  ['221','Very Dark Shell Pink',134,63,65], // already listed
+  // Grays & Blacks
+  ['3024','Very Light Brown Gray',229,227,217],
+  ['3023','Light Brown Gray',192,186,171],
+  ['3022','Medium Brown Gray',152,146,129],
+  ['3021','Very Dark Brown Gray',88,81,67],
+  ['646','Dark Beaver Gray',136,131,118],
+  ['645','Very Dark Beaver Gray',111,105,92],
+  ['644','Medium Beaver Gray',200,196,185],
+  ['642','Dark Beige Gray',174,167,151],
+  ['640','Very Dark Beige Gray',134,125,106],
+  ['3033','Very Light Mocha Brown',218,208,192],
+  ['3032','Medium Mocha Brown',177,163,140],
+  ['3031','Very Dark Mocha Brown',85,71,52],
+  ['168','Very Light Pewter',214,214,214],
+  ['169','Light Pewter',184,182,182],
+  ['317','Medium Pewter',130,126,128],
+  ['413','Dark Pewter',90,88,89],
+  ['318','Light Steel Gray',186,187,190],
+  ['415','Pearl Gray',207,209,211],
+  ['762','Very Light Pearl Gray',232,233,234],
+  ['414','Dark Steel Gray',138,136,139],
+  ['3799','Very Dark Pewter',61,60,60],
+  ['310','Black',0,0,0],
+  // Special / Metallics (approximate)
+  ['5200','Snow White',255,255,255],
+  // Additional common colors
+  ['150','Ultra Very Dark Dusty Rose',174,32,70],
+  ['151','Very Light Dusty Rose',241,194,196],
+  ['152','Medium Light Shell Pink',228,168,162],
+  ['153','Very Light Violet',227,199,220],
+  ['154','Very Dark Grape',80,38,66],
+  ['158','Medium Very Dark Cornflower Blue',83,90,122],
+  ['159','Light Gray Blue',170,176,195],
+  ['160','Medium Gray Blue',140,149,176],
+  ['161','Gray Blue',100,110,152],
+  ['167','Very Dark Yellow Beige',155,124,71],
+  ['543','Ultra Very Light Beige Brown',236,218,194],
+  ['3325','Light Baby Blue',183,213,230],
+  ['3766','Light Peacock Blue',93,186,194],
+  ['3765','Very Dark Peacock Blue',47,131,147],
+  ['807','Peacock Blue',79,168,186],
+  ['806','Dark Peacock Blue',55,147,165],
+  ['605','Very Light Cranberry',255,178,186],
+  ['604','Light Cranberry',255,146,158],
+  ['603','Cranberry',255,114,130],
+  ['602','Medium Cranberry',224,68,92],
+  ['601','Dark Cranberry',194,26,65],
+  ['600','Very Dark Cranberry',163,6,50],
+  ['3806','Light Cyclamen Pink',255,118,148],
+  ['3805','Cyclamen Pink',239,63,103],
+  ['3804','Dark Cyclamen Pink',207,26,75],
+  ['3803','Dark Mauve',149,53,79],
+  ['3689','Light Mauve',248,172,182],
+  ['3688','Medium Mauve',232,147,160],
+  ['3687','Mauve',193,93,107],
+  ['3685','Very Dark Mauve',140,36,60],
+  ['3803','Dark Mauve',149,53,79],
+  ['211','Light Lavender',218,196,220], // dup
+  ['3609','Ultra Light Plum',244,180,208],
+  ['3608','Very Light Plum',237,155,192],
+  ['3607','Light Plum',206,85,145],
+  ['3606','Bright Plum',230,37,112],
+  ['718','Plum',159,36,100],
+  ['917','Medium Plum',167,21,97],
+  ['915','Dark Plum',130,0,74],
+  ['816','Garnet',166,16,27], // dup
+  ['3685','Very Dark Mauve',140,36,60], // dup
+  ['3801','Very Dark Melon',224,47,58],
+  ['666','Bright Red',255,40,40], // dup
+  ['817','Very Dark Coral Red',202,30,40],
+  ['891','Dark Carnation',255,88,102],
+  ['892','Medium Carnation',255,121,133],
+  ['893','Light Carnation',255,153,163],
+  ['894','Very Light Carnation',255,185,191],
+  ['818','Baby Pink',255,211,215],
+  ['3706','Medium Melon',255,165,158], // dup
+  ['819','Light Baby Pink',255,228,230],
+  ['776','Medium Pink',252,166,174],
+  ['3716','Very Light Dusty Rose',255,196,202], // dup
+];
+
+// Deduplicate DMC_RAW by id (keep first occurrence)
+const _seenIds = new Set();
+const DMC = DMC_RAW.filter(([id]) => {
+  if (_seenIds.has(id)) return false;
+  _seenIds.add(id);
+  return true;
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CIE Lab Color Conversion
+// ─────────────────────────────────────────────────────────────────────────────
+function linearize(c) {
+  c /= 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function rgbToXyz(r, g, b) {
+  const rl = linearize(r), gl = linearize(g), bl = linearize(b);
+  return [
+    rl*0.4124564 + gl*0.3575761 + bl*0.1804375,
+    rl*0.2126729 + gl*0.7151522 + bl*0.0721750,
+    rl*0.0193339 + gl*0.1191920 + bl*0.9503041
+  ];
+}
+function xyzToLab(x, y, z) {
+  const f = v => v > 0.008856 ? Math.cbrt(v) : (7.787 * v) + 16/116;
+  const fx = f(x/0.95047), fy = f(y/1.00000), fz = f(z/1.08883);
+  return [116*fy - 16, 500*(fx - fy), 200*(fy - fz)];
+}
+function rgbToLab(r, g, b) {
+  return xyzToLab(...rgbToXyz(r, g, b));
+}
+function labDistance(a, b) {
+  return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2);
+}
+
+// Precompute Lab for all DMC colors
+const DMC_WITH_LAB = DMC.map(([id, name, r, g, b]) => ({
+  id, name, r, g, b, lab: rgbToLab(r, g, b)
+}));
+
+// Cache: "r,g,b" → DMC index
+const _colorCache = new Map();
+
+function nearestDMCIndex(r, g, b) {
+  const key = `${r},${g},${b}`;
+  if (_colorCache.has(key)) return _colorCache.get(key);
+  const lab = rgbToLab(r, g, b);
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < DMC_WITH_LAB.length; i++) {
+    const d = labDistance(lab, DMC_WITH_LAB[i].lab);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  _colorCache.set(key, best);
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let uploadedImage = null;
+let currentZoom = 100;
+let currentView = 'pattern';
+let showGrid = true;
+let aspectLocked = false;
+let aspectRatio = null; // W/H
+let patternData = null; // { grid: Uint16Array, palette: DMC[], W, H, cellSize }
+let originalAspect = null; // image W/H ratio
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload
+// ─────────────────────────────────────────────────────────────────────────────
+const imageInput = document.getElementById('imageInput');
+const uploadArea = document.getElementById('uploadArea');
+const uploadText = document.getElementById('uploadText');
+
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('border-brand-dark', 'bg-brand-light/20'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('border-brand-dark', 'bg-brand-light/20'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('border-brand-dark', 'bg-brand-light/20');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+imageInput.addEventListener('change', () => { if (imageInput.files[0]) loadFile(imageInput.files[0]); });
+
+function loadFile(file) {
+  if (!file.type.match('image/(png|jpeg|webp)')) return showToast('Please upload a PNG or JPG image.');
+  if (file.size > 10 * 1024 * 1024) return showToast('File size must be under 10MB.');
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedImage = new Image();
+    uploadedImage.onload = () => {
+      document.getElementById('originalImage').src = e.target.result;
+      document.getElementById('uploadThumb').src = e.target.result;
+      document.getElementById('uploadPreview').classList.remove('hidden');
+      uploadText.textContent = file.name;
+      originalAspect = uploadedImage.naturalWidth / uploadedImage.naturalHeight;
+      // Auto-set height from width if locked
+      if (aspectLocked) syncHeight();
+      showToast('Image loaded! Click Generate Pattern.');
+    };
+    uploadedImage.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Aspect Ratio Lock
+// ─────────────────────────────────────────────────────────────────────────────
+const lockBtn = document.getElementById('lockAspectBtn');
+const lockIcon = document.getElementById('lockIcon');
+const aspectNote = document.getElementById('aspectNote');
+const gridWidthEl = document.getElementById('gridWidth');
+const gridHeightEl = document.getElementById('gridHeight');
+
+lockBtn.addEventListener('click', () => {
+  aspectLocked = !aspectLocked;
+  lockBtn.classList.toggle('bg-brand-light', aspectLocked);
+  lockBtn.classList.toggle('border-brand-dark', aspectLocked);
+  lockBtn.classList.toggle('text-brand-dark', aspectLocked);
+  lockIcon.className = aspectLocked ? 'fa-solid fa-lock text-xs' : 'fa-solid fa-link text-xs';
+  if (aspectLocked && originalAspect) {
+    aspectRatio = originalAspect;
+    syncHeight();
+    aspectNote.textContent = `Aspect ratio: ${originalAspect.toFixed(2)}:1 (locked)`;
+  } else {
+    aspectNote.textContent = 'Aspect ratio: free';
+  }
+});
+
+gridWidthEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncHeight(); });
+gridHeightEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncWidth(); });
+
+function syncHeight() {
+  const w = parseInt(gridWidthEl.value) || 80;
+  gridHeightEl.value = Math.max(10, Math.round(w / originalAspect));
+}
+function syncWidth() {
+  const h = parseInt(gridHeightEl.value) || 68;
+  gridWidthEl.value = Math.max(10, Math.round(h * originalAspect));
+}
+
+// Max colors slider label
+const maxColorsEl = document.getElementById('maxColors');
+const maxColorsVal = document.getElementById('maxColorsVal');
+maxColorsEl.addEventListener('input', () => maxColorsVal.textContent = maxColorsEl.value);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate Pattern
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('generateBtn').addEventListener('click', () => {
+  if (!uploadedImage) { showToast('Please upload an image first.'); return; }
+  // Run async so the loading state renders
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('patternContainer').classList.add('hidden');
+  document.getElementById('originalContainer').classList.add('hidden');
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('legendContainer').classList.add('hidden');
+
+  setTimeout(generatePattern, 50);
+});
+
+function generatePattern() {
+  const W = Math.max(10, Math.min(300, parseInt(gridWidthEl.value) || 80));
+  const H = Math.max(10, Math.min(300, parseInt(gridHeightEl.value) || 68));
+  const maxColors = parseInt(maxColorsEl.value) || 15;
+  const stitchRatio = document.querySelector('input[name="grid_type"]:checked').value;
+  const cellW = stitchRatio === 'knit' ? 10 : 10;
+  const cellH = stitchRatio === 'knit' ? 12 : 10; // knit cells are taller
+
+  // Draw image to offscreen canvas at grid resolution
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d');
+  ctx.drawImage(uploadedImage, 0, 0, W, H);
+  const imgData = ctx.getImageData(0, 0, W, H).data;
+
+  // Map each pixel to nearest DMC index
+  const dmcIndices = new Uint16Array(W * H);
+  const freqMap = new Map(); // dmcIdx → count
+  for (let i = 0; i < W * H; i++) {
+    const r = imgData[i*4], g = imgData[i*4+1], b = imgData[i*4+2];
+    const idx = nearestDMCIndex(r, g, b);
+    dmcIndices[i] = idx;
+    freqMap.set(idx, (freqMap.get(idx) || 0) + 1);
+  }
+
+  // Determine palette — top N most-used DMC colors
+  let sortedEntries = [...freqMap.entries()].sort((a, b) => b[1] - a[1]);
+  let paletteIndices; // array of DMC_WITH_LAB indices
+  if (sortedEntries.length <= maxColors) {
+    paletteIndices = sortedEntries.map(e => e[0]);
+  } else {
+    paletteIndices = sortedEntries.slice(0, maxColors).map(e => e[0]);
+    const paletteSet = new Set(paletteIndices);
+    const paletteLabs = paletteIndices.map(i => DMC_WITH_LAB[i].lab);
+    // Re-map excluded pixels to nearest in-palette DMC
+    for (let i = 0; i < W * H; i++) {
+      if (!paletteSet.has(dmcIndices[i])) {
+        const lab = DMC_WITH_LAB[dmcIndices[i]].lab;
+        let best = paletteIndices[0], bestDist = Infinity;
+        for (let j = 0; j < paletteIndices.length; j++) {
+          const d = labDistance(lab, paletteLabs[j]);
+          if (d < bestDist) { bestDist = d; best = paletteIndices[j]; }
+        }
+        dmcIndices[i] = best;
+      }
+    }
+  }
+
+  // Build local palette array (ordered by paletteIndices)
+  const palette = paletteIndices.map(i => DMC_WITH_LAB[i]);
+
+  // Count stitches per palette entry
+  const stitchCounts = new Map();
+  paletteIndices.forEach(i => stitchCounts.set(i, 0));
+  for (let i = 0; i < W * H; i++) {
+    stitchCounts.set(dmcIndices[i], (stitchCounts.get(dmcIndices[i]) || 0) + 1);
+  }
+
+  // Store pattern state
+  patternData = { grid: dmcIndices, palette, paletteIndices, stitchCounts, W, H, cellW, cellH };
+
+  // Render
+  renderCanvas();
+  renderLegend();
+  renderSummary();
+
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('patternContainer').classList.remove('hidden');
+  document.getElementById('legendContainer').classList.remove('hidden');
+  document.getElementById('summaryPanel').classList.remove('hidden');
+  setView('pattern');
+  currentZoom = 100;
+  updateZoom();
+}
+
+function renderCanvas() {
+  if (!patternData) return;
+  const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
+  const canvas = document.getElementById('patternCanvas');
+  canvas.width = W * cellW;
+  canvas.height = H * cellH;
+  const ctx = canvas.getContext('2d');
+
+  // Draw cells
+  const paletteIndexMap = new Map(paletteIndices.map((dmcIdx, pos) => [dmcIdx, pos]));
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dmcIdx = grid[y * W + x];
+      const dmc = palette[paletteIndexMap.get(dmcIdx)];
+      ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+      ctx.fillRect(x * cellW, y * cellH, cellW, cellH);
+    }
+  }
+
+  // Draw grid lines
+  if (showGrid) drawGridLines(ctx, W, H, cellW, cellH);
+}
+
+function drawGridLines(ctx, W, H, cellW, cellH) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 0.5;
+  // Draw major lines every 10 cells in a slightly darker color
+  for (let x = 0; x <= W; x++) {
+    ctx.beginPath();
+    if (x % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    ctx.moveTo(x * cellW, 0);
+    ctx.lineTo(x * cellW, H * cellH);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= H; y++) {
+    ctx.beginPath();
+    if (y % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    ctx.moveTo(0, y * cellH);
+    ctx.lineTo(W * cellH, y * cellH);
+    ctx.stroke();
+  }
+}
+
+function renderLegend() {
+  if (!patternData) return;
+  const { palette, paletteIndices, stitchCounts } = patternData;
+  const body = document.getElementById('legendBody');
+  body.innerHTML = '';
+
+  // Sort legend by stitch count descending
+  const sorted = paletteIndices
+    .map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
+    .sort((a, b) => b.count - a.count);
+
+  sorted.forEach(({ dmc, count }, i) => {
+    const skeins = Math.ceil(count / 150);
+    const row = document.createElement('tr');
+    row.className = 'legend-row border-b border-gray-50 transition-colors';
+    row.innerHTML = `
+      <td class="py-2.5 pr-2 text-xs text-brand-gray">${i + 1}</td>
+      <td class="py-2.5 pr-3">
+        <div class="w-7 h-7 rounded-lg border border-gray-200 shadow-sm" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})"></div>
+      </td>
+      <td class="py-2.5 pr-3 font-bold text-brand-dark text-sm">${dmc.id}</td>
+      <td class="py-2.5 pr-3 text-sm text-brand-darker">${dmc.name}</td>
+      <td class="py-2.5 pr-3 text-sm text-right font-medium">${count.toLocaleString()}</td>
+      <td class="py-2.5 text-sm text-right font-semibold text-brand-dark">${skeins}</td>
+    `;
+    body.appendChild(row);
+  });
+
+  document.getElementById('legendColorCount').textContent = `${sorted.length} DMC color${sorted.length !== 1 ? 's' : ''}`;
+}
+
+function renderSummary() {
+  if (!patternData) return;
+  const { palette, paletteIndices, W, H } = patternData;
+  const gaugeS = parseInt(document.getElementById('gaugeStitches').value) || 20;
+  const gaugeR = parseInt(document.getElementById('gaugeRows').value) || 26;
+  const estW = Math.round((W / gaugeS) * 10);
+  const estH = Math.round((H / gaugeR) * 10);
+  document.getElementById('summarySize').textContent = `${W} × ${H} sts`;
+  document.getElementById('summaryColors').textContent = `${palette.length}`;
+  document.getElementById('summaryEst').textContent = `${estW}cm × ${estH}cm`;
+
+  const swatchEl = document.getElementById('colorSwatches');
+  swatchEl.innerHTML = '';
+  palette.forEach(dmc => {
+    const s = document.createElement('div');
+    s.className = 'w-5 h-5 rounded-full border border-white shadow-sm cursor-pointer';
+    s.style.backgroundColor = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+    s.title = `DMC ${dmc.id}: ${dmc.name}`;
+    swatchEl.appendChild(s);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hover Tooltip
+// ─────────────────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+const patternCanvas = document.getElementById('patternCanvas');
+
+patternCanvas.addEventListener('mousemove', (e) => {
+  if (!patternData) return;
+  const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
+  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
+  if (x < 0 || x >= W || y < 0 || y >= H) { tooltip.style.display = 'none'; return; }
+
+  const dmcIdx = grid[y * W + x];
+  const paletteIndexMap = new Map(paletteIndices.map((di, pos) => [di, pos]));
+  const dmc = palette[paletteIndexMap.get(dmcIdx)];
+
+  tooltip.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:14px;height:14px;border-radius:4px;background:rgb(${dmc.r},${dmc.g},${dmc.b});border:1px solid rgba(255,255,255,0.3)"></div>
+      <span>DMC <strong>${dmc.id}</strong> · ${dmc.name}</span>
+    </div>
+    <div style="margin-top:2px;opacity:0.75">Col ${x+1}, Row ${y+1}</div>
+  `;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top = (e.clientY - 10) + 'px';
+});
+
+patternCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grid Toggle
+// ─────────────────────────────────────────────────────────────────────────────
+const gridToggleBtn = document.getElementById('gridToggleBtn');
+gridToggleBtn.addEventListener('click', () => {
+  showGrid = !showGrid;
+  gridToggleBtn.classList.toggle('bg-brand-light', showGrid);
+  gridToggleBtn.classList.toggle('border-brand-dark', showGrid);
+  if (patternData) renderCanvas();
+});
+// Start with grid active
+gridToggleBtn.classList.add('bg-brand-light', 'border-brand-dark');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// View Toggle
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('viewPatternBtn').addEventListener('click', () => setView('pattern'));
+document.getElementById('viewOriginalBtn').addEventListener('click', () => setView('original'));
+
+function setView(view) {
+  currentView = view;
+  const pat = view === 'pattern';
+  document.getElementById('viewPatternBtn').className = pat
+    ? 'px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-semibold text-brand-dark'
+    : 'px-4 py-1.5 rounded-md text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors';
+  document.getElementById('viewOriginalBtn').className = !pat
+    ? 'px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-semibold text-brand-dark'
+    : 'px-4 py-1.5 rounded-md text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors';
+  document.getElementById('patternContainer').classList.toggle('hidden', !pat);
+  document.getElementById('originalContainer').classList.toggle('hidden', pat);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zoom
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('zoomInBtn').addEventListener('click', () => { currentZoom = Math.min(400, currentZoom + 25); updateZoom(); });
+document.getElementById('zoomOutBtn').addEventListener('click', () => { currentZoom = Math.max(25, currentZoom - 25); updateZoom(); });
+
+function updateZoom() {
+  document.getElementById('zoomLabel').textContent = currentZoom + '%';
+  const grid = document.getElementById('patternGrid');
+  grid.style.transform = `scale(${currentZoom / 100})`;
+  grid.style.transformOrigin = 'top left';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export PNG
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('exportPngBtn').addEventListener('click', () => {
+  const canvas = document.getElementById('patternCanvas');
+  if (!canvas.width) { showToast('Generate a pattern first.'); return; }
+  if (!patternData) return;
+
+  // Build export canvas with legend
+  const { palette, paletteIndices, stitchCounts, W, H, cellW, cellH } = patternData;
+  const LEGEND_ROW_H = 28;
+  const LEGEND_PADDING = 40;
+  const TITLE_H = 60;
+  const totalLegendH = LEGEND_PADDING + palette.length * LEGEND_ROW_H + 30;
+  const exportH = TITLE_H + canvas.height + totalLegendH;
+  const exportW = Math.max(canvas.width + 80, 600);
+
+  const exp = document.createElement('canvas');
+  exp.width = exportW;
+  exp.height = exportH;
+  const ctx = exp.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, exportW, exportH);
+
+  // Title
+  ctx.fillStyle = '#556B2F';
+  ctx.font = 'bold 22px Manrope, sans-serif';
+  ctx.fillText('KnitMate Pattern', 40, 40);
+
+  // Pattern canvas
+  ctx.drawImage(canvas, 40, TITLE_H);
+
+  // Legend
+  let ly = TITLE_H + canvas.height + 30;
+  ctx.fillStyle = '#556B2F';
+  ctx.font = 'bold 16px Manrope, sans-serif';
+  ctx.fillText('DMC Thread Legend', 40, ly);
+  ly += 24;
+
+  ctx.font = '12px Manrope, sans-serif';
+  ctx.fillStyle = '#7A8C6E';
+  ctx.fillText('No.', 40, ly);
+  ctx.fillText('DMC', 90, ly);
+  ctx.fillText('Color Name', 160, ly);
+  ctx.fillText('Stitches', exportW - 160, ly);
+  ctx.fillText('Skeins', exportW - 70, ly);
+  ly += 6;
+  ctx.strokeStyle = '#E5E7EB';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(40, ly); ctx.lineTo(exportW - 40, ly); ctx.stroke();
+  ly += 10;
+
+  const sorted = paletteIndices
+    .map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
+    .sort((a, b) => b.count - a.count);
+
+  sorted.forEach(({ dmc, count }, i) => {
+    const skeins = Math.ceil(count / 150);
+    const rowY = ly + i * LEGEND_ROW_H;
+    // Swatch
+    ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+    ctx.fillRect(40, rowY - 14, 18, 18);
+    ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
+    ctx.strokeRect(40, rowY - 14, 18, 18);
+    // Text
+    ctx.fillStyle = '#556B2F';
+    ctx.font = 'bold 12px Manrope, sans-serif';
+    ctx.fillText(dmc.id, 70, rowY);
+    ctx.font = '12px Manrope, sans-serif';
+    ctx.fillText(dmc.name, 140, rowY);
+    ctx.textAlign = 'right';
+    ctx.fillText(count.toLocaleString(), exportW - 90, rowY);
+    ctx.fillText(String(skeins), exportW - 40, rowY);
+    ctx.textAlign = 'left';
+  });
+
+  const link = document.createElement('a');
+  link.download = 'knitmate-pattern.png';
+  link.href = exp.toDataURL('image/png');
+  link.click();
+  showToast('PNG downloaded!');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export PDF
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('exportPdfBtn').addEventListener('click', () => {
+  const canvas = document.getElementById('patternCanvas');
+  if (!canvas.width) { showToast('Generate a pattern first.'); return; }
+
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Please allow popups to export PDF.'); return; }
+
+  // Build a print-friendly HTML page
+  const { palette, paletteIndices, stitchCounts } = patternData;
+  const sorted = paletteIndices
+    .map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
+    .sort((a, b) => b.count - a.count);
+
+  const legendRows = sorted.map(({ dmc, count }, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><div style="width:18px;height:18px;background:rgb(${dmc.r},${dmc.g},${dmc.b});border:1px solid #ccc;border-radius:3px"></div></td>
+      <td><strong>${dmc.id}</strong></td>
+      <td>${dmc.name}</td>
+      <td style="text-align:right">${count.toLocaleString()}</td>
+      <td style="text-align:right">${Math.ceil(count/150)}</td>
+    </tr>
+  `).join('');
+
+  win.document.write(`<!DOCTYPE html><html><head><title>KnitMate Pattern</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; color: #556B2F; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    img { max-width: 100%; border: 1px solid #eee; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+    th { border-bottom: 2px solid #556B2F; padding: 6px 8px; text-align: left; font-size: 11px; color: #777; }
+    td { border-bottom: 1px solid #eee; padding: 5px 8px; vertical-align: middle; }
+    @media print { body { margin: 10px; } }
+  </style></head><body>
+  <h1>KnitMate Cross-Stitch Pattern</h1>
+  <img src="${canvas.toDataURL()}">
+  <h2 style="font-size:16px;margin-top:24px">DMC Thread Legend</h2>
+  <table>
+    <thead><tr><th>#</th><th>Swatch</th><th>DMC No.</th><th>Color Name</th><th style="text-align:right">Stitches</th><th style="text-align:right">Skeins</th></tr></thead>
+    <tbody>${legendRows}</tbody>
+  </table>
+  <p style="font-size:11px;color:#777;margin-top:12px">* Skein estimate: ~150 stitches per skein at 14-count Aida, 2 strands.</p>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast Notification
+// ─────────────────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitMate - Make Your Own Pattern</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#EDBBA4',       /* Peach — buttons */
+            secondary: '#CF9B71',     /* Caramel — secondary headings, CTA bg */
+            accent: '#9B9C8A',        /* Sage Green — icon accents, muted */
+            light: '#EBDBD4',         /* Light Blush — section/footer backgrounds */
+            warm: '#C49270',          /* word/text color */
+            bluegray: '#C4CDCC',      /* Light Blue-Gray — borders */
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            heading: ['Poppins', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', sans-serif; }
+    .gradient-text {
+      background: linear-gradient(90deg, #C49270, #CF9B71);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-bg {
+      background:
+        radial-gradient(circle at top right, rgba(237, 187, 164, 0.15), transparent 40%),
+        radial-gradient(circle at bottom left, rgba(196, 146, 112, 0.08), transparent 40%);
+    }
+  </style>
+</head>
+
+<body class="w-full min-h-screen bg-white text-gray-800 m-0 p-0 overflow-x-hidden">
+
+  <!-- Navigation -->
+  <nav class="w-full bg-white/90 backdrop-blur-md fixed top-0 z-50 border-b border-bluegray">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-20">
+        <!-- Logo -->
+        <a href="index.html" class="flex-shrink-0 flex items-center">
+          <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-warm font-bold text-xl mr-2">
+            <i class="fa-solid fa-palette"></i>
+          </div>
+          <span class="font-heading font-bold text-2xl text-warm">KnitMate</span>
+        </a>
+        <!-- Desktop Menu -->
+        <div class="hidden md:flex space-x-8 items-center">
+          <a href="index.html" class="text-warm hover:text-secondary font-medium transition-colors">Home</a>
+          <a href="convert.html" class="text-warm hover:text-secondary font-medium transition-colors">Convert Image</a>
+          <a href="design.html" class="text-warm hover:text-secondary font-medium transition-colors">Design Colorwork</a>
+          <a href="patterns.html" class="text-warm hover:text-secondary font-medium transition-colors">Free Patterns</a>
+        </div>
+        <!-- CTA & Mobile Toggle -->
+        <div class="flex items-center space-x-4">
+          <a href="#" class="hidden lg:block text-accent hover:text-warm font-medium">Log in</a>
+          <button class="bg-[#C6634E] hover:bg-[#b3573f] text-white px-6 py-2.5 rounded-full font-medium transition-all transform hover:scale-105 shadow-lg shadow-[#C6634E]/30">
+            Get Started
+          </button>
+          <button class="md:hidden text-warm hover:text-secondary text-2xl">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="pt-32 pb-20 lg:pt-40 lg:pb-28 hero-bg w-full relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div class="flex flex-col lg:flex-row items-center justify-between gap-12">
+        <!-- Hero Content -->
+        <div class="w-full lg:w-1/2 text-center lg:text-left">
+          <div class="inline-flex items-center px-4 py-2 rounded-full bg-light text-warm font-medium text-sm mb-6 border border-primary">
+            <span class="flex h-2 w-2 rounded-full bg-warm mr-2"></span>
+            New: AI Pattern Generator available now!
+          </div>
+          <h1 class="text-5xl lg:text-6xl font-extrabold text-warm leading-tight mb-6">
+            Make your own pattern
+          </h1>
+          <p class="text-lg text-accent mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+            The all-in-one platform for creators. Convert images seamlessly, design stunning colorworks, and access thousands of free patterns to elevate your projects.
+          </p>
+          <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+            <a href="convert.html" class="w-full sm:w-auto bg-[#C6634E] hover:bg-[#b3573f] text-white px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:-translate-y-1 shadow-xl shadow-[#C6634E]/30 flex items-center justify-center">
+              Start Creating Free
+              <i class="fa-solid fa-arrow-right ml-2"></i>
+            </a>
+            <button class="w-full sm:w-auto bg-white hover:bg-light text-warm border-2 border-bluegray px-8 py-4 rounded-full font-semibold text-lg transition-all flex items-center justify-center">
+              <i class="fa-solid fa-play text-secondary mr-2"></i>
+              Watch Demo
+            </button>
+          </div>
+          <div class="mt-10 flex items-center justify-center lg:justify-start space-x-4">
+            <div class="flex -space-x-3">
+              <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/2cc26b0b77-7f4e40f0fdb0e6b26ce9.png" alt="User" class="w-10 h-10 rounded-full border-2 border-white object-cover">
+              <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/409c34df90-8ed41d2aead17e02bcd6.png" alt="User" class="w-10 h-10 rounded-full border-2 border-white object-cover">
+              <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/1d0c48ffe4-aee5607194026ff1dd35.png" alt="User" class="w-10 h-10 rounded-full border-2 border-white object-cover">
+              <div class="w-10 h-10 rounded-full border-2 border-white bg-light flex items-center justify-center text-xs font-bold text-warm">+2k</div>
+            </div>
+            <p class="text-sm text-accent font-medium">Trusted by 2,000+ knitters worldwide</p>
+          </div>
+        </div>
+        <!-- Hero Image -->
+        <div class="w-full lg:w-1/2 relative">
+          <div class="absolute inset-0 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-3xl transform rotate-3 scale-105 blur-lg"></div>
+          <div class="relative bg-white p-4 rounded-3xl shadow-2xl border border-bluegray">
+            <img src="images/homepage.jpg" alt="Knitting pattern example" class="w-full h-auto rounded-2xl object-cover">
+            <!-- Floating Elements -->
+            <div class="absolute -left-8 top-1/4 bg-white p-4 rounded-xl shadow-xl border border-bluegray animate-bounce">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-light flex items-center justify-center text-warm">
+                  <i class="fa-solid fa-check"></i>
+                </div>
+                <div>
+                  <p class="text-sm font-bold text-warm">Conversion Done</p>
+                  <p class="text-xs text-accent">0.2 seconds</p>
+                </div>
+              </div>
+            </div>
+            <div class="absolute -right-6 bottom-1/4 bg-white p-3 rounded-xl shadow-xl border border-bluegray animate-bounce" style="animation-delay: 1s">
+              <div class="flex gap-2">
+                <div class="w-6 h-6 rounded-full bg-[#EDBBA4]"></div>
+                <div class="w-6 h-6 rounded-full bg-[#C49270]"></div>
+                <div class="w-6 h-6 rounded-full bg-[#EBDBD4]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-20 bg-light w-full">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-3xl md:text-4xl font-bold text-warm mb-4">Three powerful tools.<br>One seamless workflow.</h2>
+        <p class="text-accent text-lg">Everything you need to bring your visual ideas to life, from format conversion to complex pattern generation.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Feature 1 -->
+        <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-bluegray group">
+          <div class="w-16 h-16 rounded-2xl bg-light flex items-center justify-center text-warm text-2xl mb-6 group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-image"></i>
+          </div>
+          <h3 class="text-2xl font-bold text-warm mb-3">Convert Image</h3>
+          <p class="text-accent mb-6 leading-relaxed">Instantly convert images into a knitting pattern with customizable grid sizes and color palettes.</p>
+          <a href="convert.html" class="text-secondary font-semibold flex items-center hover:text-warm transition-colors">
+            Try Converter <i class="fa-solid fa-arrow-right ml-2 text-sm"></i>
+          </a>
+        </div>
+        <!-- Feature 2 -->
+        <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-bluegray group">
+          <div class="w-16 h-16 rounded-2xl bg-light flex items-center justify-center text-warm text-2xl mb-6 group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-fill-drip"></i>
+          </div>
+          <h3 class="text-2xl font-bold text-warm mb-3">Design Colorwork</h3>
+          <p class="text-accent mb-6 leading-relaxed">Extract palettes from images, generate complementary colors, and test combinations for your next big project.</p>
+          <a href="design.html" class="text-secondary font-semibold flex items-center hover:text-warm transition-colors">
+            Explore Colors <i class="fa-solid fa-arrow-right ml-2 text-sm"></i>
+          </a>
+        </div>
+        <!-- Feature 3 -->
+        <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-bluegray group">
+          <div class="w-16 h-16 rounded-2xl bg-light flex items-center justify-center text-secondary text-2xl mb-6 group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-shapes"></i>
+          </div>
+          <h3 class="text-2xl font-bold text-warm mb-3">Free Patterns</h3>
+          <p class="text-accent mb-6 leading-relaxed">Access our library of 5,000+ seamless patterns. Customize colors, scale, and download in vector formats.</p>
+          <a href="patterns.html" class="text-secondary font-semibold flex items-center hover:text-warm transition-colors">
+            Browse Patterns <i class="fa-solid fa-arrow-right ml-2 text-sm"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sample Works Section -->
+  <section id="patterns" class="py-24 bg-white w-full">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-3xl md:text-4xl font-bold text-warm mb-4">Sample Works &amp; Inspiration</h2>
+        <p class="text-accent text-lg">Explore what's possible with our pattern generator and color tools.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Item 1 -->
+        <div class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer border border-bluegray">
+          <div class="h-48 overflow-hidden relative">
+            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/df56be2800-c6ecc39e13c80418cbbf.png" alt="Memphis Geometric pattern" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <button class="bg-white text-warm px-4 py-2 rounded-full font-medium text-sm hover:bg-primary transition-colors">Edit Pattern</button>
+            </div>
+          </div>
+          <div class="p-4 border-t border-bluegray">
+            <h4 class="font-bold text-warm">Memphis Geometric</h4>
+            <div class="flex gap-1 mt-2">
+              <div class="w-4 h-4 rounded-full bg-[#EDBBA4]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#C49270]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#EBDBD4]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#CF9B71]"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Item 2 -->
+        <div class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer border border-bluegray">
+          <div class="h-48 overflow-hidden relative">
+            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/d870d9cb2e-366a55e9347df0adf444.png" alt="Minimalist Line Art pattern" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <button class="bg-white text-warm px-4 py-2 rounded-full font-medium text-sm hover:bg-primary transition-colors">Edit Pattern</button>
+            </div>
+          </div>
+          <div class="p-4 border-t border-bluegray">
+            <h4 class="font-bold text-warm">Minimalist Line Art</h4>
+            <div class="flex gap-1 mt-2">
+              <div class="w-4 h-4 rounded-full bg-[#1A1A1A]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#FAFAFA] border border-bluegray"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Item 3 -->
+        <div class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer border border-bluegray">
+          <div class="h-48 overflow-hidden relative">
+            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/14001b066b-0bda924897cbc1d2599f.png" alt="Fluid Gradient pattern" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <button class="bg-white text-warm px-4 py-2 rounded-full font-medium text-sm hover:bg-primary transition-colors">View Palette</button>
+            </div>
+          </div>
+          <div class="p-4 border-t border-bluegray">
+            <h4 class="font-bold text-warm">Fluid Gradient</h4>
+            <div class="flex gap-1 mt-2">
+              <div class="w-4 h-4 rounded-full bg-[#FF3366]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#9933FF]"></div>
+              <div class="w-4 h-4 rounded-full bg-[#00CCFF]"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="text-center mt-12">
+        <a href="patterns.html" class="inline-block bg-white border-2 border-bluegray text-warm hover:border-primary hover:bg-light px-8 py-3 rounded-full font-semibold transition-all">View All Patterns</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="py-20 bg-primary w-full relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Ready to start knitting?</h2>
+      <p class="text-white/80 text-lg mb-8 max-w-2xl mx-auto">Join thousands of knitters using KnitMate to bring their creative visions to life.</p>
+      <a href="convert.html" class="inline-block bg-white hover:bg-light text-secondary px-10 py-4 rounded-full font-semibold text-lg transition-all transform hover:-translate-y-1 shadow-xl shadow-[#EDBBA4]/40">
+        Start Creating Free <i class="fa-solid fa-arrow-right ml-2"></i>
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-white text-warm py-10 w-full border-t border-bluegray">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center">
+        <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-warm mr-2">
+          <i class="fa-solid fa-palette text-sm"></i>
+        </div>
+        <span class="font-heading font-bold text-warm">KnitMate</span>
+      </div>
+      <p class="text-sm text-accent">&copy; 2026 KnitMate. All rights reserved.</p>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="text-accent hover:text-warm transition-colors">Privacy</a>
+        <a href="#" class="text-accent hover:text-warm transition-colors">Terms</a>
+        <a href="#" class="text-accent hover:text-warm transition-colors">Contact</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

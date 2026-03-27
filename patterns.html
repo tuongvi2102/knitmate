@@ -9,29 +9,39 @@
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Manrope', 'sans-serif'] },
-          colors: {
-            brand: { dark: '#556B2F', darker: '#3D4E22', light: '#D4E8C2', gray: '#7A8C6E', bg: '#F5F5DC' }
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            heading: ['Poppins', 'sans-serif'],
           },
-          boxShadow: { 'card': '0 4px 20px -2px rgba(85,107,47,0.05)' }
+          colors: {
+            primary: '#EDBBA4',
+            secondary: '#CF9B71',
+            accent: '#9B9C8A',
+            light: '#EBDBD4',
+            warm: '#C49270',
+            bluegray: '#C4CDCC',
+            brand: { dark: '#C49270', darker: '#A07050', light: '#EBDBD4', gray: '#9B9C8A', bg: '#FAF7F4' }
+          },
+          boxShadow: { 'card': '0 4px 20px -2px rgba(196,146,112,0.05)' }
         }
       }
     }
   </script>
   <!-- Supabase JS client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <style>
-    body { font-family: 'Manrope', sans-serif; background-color: #F5F5DC; }
+    body { font-family: 'Inter', sans-serif; background-color: #FAF7F4; }
+    h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', sans-serif; }
     .pattern-card { transition: transform 0.2s, box-shadow 0.2s; }
-    .pattern-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px -8px rgba(85,107,47,0.15); }
+    .pattern-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px -8px rgba(196,146,112,0.15); }
     .pattern-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; image-rendering: pixelated; }
     #modal { transition: opacity 0.2s; }
     #modalInner { transition: transform 0.2s; }
     #toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #556B2F; color: white; padding: 10px 20px;
+      background: #C49270; color: white; padding: 10px 20px;
       border-radius: 999px; font-size: 14px; font-weight: 600;
       z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none;
     }
@@ -47,34 +57,47 @@
     .pattern-card { break-inside: avoid; margin-bottom: 20px; }
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
-    .filter-btn.active { background: #556B2F; color: #D4E8C2; border-color: #556B2F; }
+    .filter-btn.active { background: #C49270; color: #EBDBD4; border-color: #C49270; }
   </style>
 </head>
 
-<body class="w-full min-h-screen text-brand-darker antialiased">
+<body class="w-full min-h-screen text-warm antialiased overflow-x-hidden">
 <div id="toast"></div>
 
-<!-- Nav -->
-<nav class="fixed w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+<!-- Navigation -->
+<nav class="w-full bg-white/90 backdrop-blur-md fixed top-0 z-50 border-b border-bluegray">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="flex justify-between items-center h-20">
-      <a href="index.html" class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-lg bg-brand-dark flex items-center justify-center text-brand-light">
-          <i class="fa-solid fa-palette text-sm"></i>
-        </div>
-        <span class="text-xl font-bold text-brand-dark">KnitMate</span>
+      <a href="index.html" class="flex-shrink-0 flex items-center">
+        <img src="images/logo_only3.png" alt="KnitMate logo" class="h-14 w-auto mr-2">
+        <span class="font-heading font-bold text-2xl text-warm">Design colorwork</span>
       </a>
-      <div class="hidden md:flex items-center space-x-8">
-        <a href="index.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Home</a>
-        <a href="convert.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Convert Image</a>
-        <a href="design.html" class="text-sm font-medium text-brand-dark hover:text-brand-gray transition-colors">Design Colorwork</a>
-        <a href="patterns.html" class="text-sm font-medium text-brand-dark border-b-2 border-brand-dark pb-0.5">Free Patterns</a>
+      <div class="hidden md:flex space-x-8 items-center">
+        <a href="index.html" class="text-warm hover:text-secondary font-medium transition-colors">Home</a>
+        <a href="convert.html" class="text-warm hover:text-secondary font-medium transition-colors">Convert Image</a>
+        <a href="design.html" class="text-warm hover:text-secondary font-medium transition-colors">Design Colorwork</a>
+        <a href="patterns.html" class="text-warm font-semibold border-b-2 border-warm pb-0.5">Free Patterns</a>
       </div>
-      <div class="hidden md:flex items-center space-x-4">
-        <button class="text-sm font-medium text-brand-dark hover:text-brand-gray px-4 py-2">Log in</button>
-        <button class="bg-brand-dark text-white text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-brand-darker transition-all shadow-md">Share Pattern</button>
+      <div class="flex items-center space-x-4">
+        <a href="#" class="hidden lg:block text-accent hover:text-warm font-medium">Log in</a>
+        <button class="hidden md:block bg-[#C6634E] hover:bg-[#b3573f] text-white px-6 py-2.5 rounded-full font-medium transition-all transform hover:scale-105 shadow-lg shadow-[#C6634E]/30">
+          Share Pattern
+        </button>
+        <button id="mobileMenuBtn" class="md:hidden text-warm hover:text-secondary text-2xl">
+          <i class="fa-solid fa-bars"></i>
+        </button>
       </div>
-      <button class="md:hidden text-brand-darker text-2xl"><i class="fa-solid fa-bars"></i></button>
+    </div>
+  </div>
+  <!-- Mobile Menu -->
+  <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-bluegray px-4 py-4 space-y-1">
+    <a href="index.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Home</a>
+    <a href="convert.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Convert Image</a>
+    <a href="design.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Design Colorwork</a>
+    <a href="patterns.html" class="block text-warm font-semibold py-2 px-2 rounded-lg bg-light">Free Patterns</a>
+    <div class="pt-3 border-t border-bluegray flex items-center gap-3">
+      <a href="#" class="text-accent hover:text-warm font-medium text-sm">Log in</a>
+      <button class="bg-[#C6634E] hover:bg-[#b3573f] text-white px-5 py-2 rounded-full font-medium text-sm">Share Pattern</button>
     </div>
   </div>
 </nav>
@@ -925,6 +948,11 @@ function showToast(msg) {
 // INIT
 // ─────────────────────────────────────────────────────────────────────────────
 loadPatterns();
+
+// Mobile menu toggle
+document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+  document.getElementById('mobileMenu').classList.toggle('hidden');
+});
 </script>
 </body>
 </html>

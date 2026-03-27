@@ -52,10 +52,8 @@
       <div class="flex justify-between items-center h-20">
         <!-- Logo -->
         <a href="index.html" class="flex-shrink-0 flex items-center">
-          <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-warm font-bold text-xl mr-2">
-            <i class="fa-solid fa-palette"></i>
-          </div>
-          <span class="font-heading font-bold text-2xl text-warm">KnitMate</span>
+          <img src="images/logo_only3.png" alt="KnitMate logo" class="h-14 w-auto mr-2">
+          <span class="font-heading font-bold text-2xl text-warm">Design colorwork</span>
         </a>
         <!-- Desktop Menu -->
         <div class="hidden md:flex space-x-8 items-center">
@@ -70,10 +68,21 @@
           <button class="bg-[#C6634E] hover:bg-[#b3573f] text-white px-6 py-2.5 rounded-full font-medium transition-all transform hover:scale-105 shadow-lg shadow-[#C6634E]/30">
             Get Started
           </button>
-          <button class="md:hidden text-warm hover:text-secondary text-2xl">
+          <button id="mobileMenuBtn" class="md:hidden text-warm hover:text-secondary text-2xl">
             <i class="fa-solid fa-bars"></i>
           </button>
         </div>
+      </div>
+    </div>
+    <!-- Mobile Menu -->
+    <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-bluegray px-4 py-4 space-y-1">
+      <a href="index.html" class="block text-warm font-semibold py-2 px-2 rounded-lg bg-light">Home</a>
+      <a href="convert.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Convert Image</a>
+      <a href="design.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Design Colorwork</a>
+      <a href="patterns.html" class="block text-warm hover:text-secondary font-medium py-2 px-2 rounded-lg hover:bg-light transition-colors">Free Patterns</a>
+      <div class="pt-3 border-t border-bluegray flex items-center gap-3">
+        <a href="#" class="text-accent hover:text-warm font-medium text-sm">Log in</a>
+        <button class="bg-[#C6634E] hover:bg-[#b3573f] text-white px-5 py-2 rounded-full font-medium text-sm">Get Started</button>
       </div>
     </div>
   </nav>
@@ -284,5 +293,10 @@
     </div>
   </footer>
 
+<script>
+  document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+    document.getElementById('mobileMenu').classList.toggle('hidden');
+  });
+</script>
 </body>
 </html>

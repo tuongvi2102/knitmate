@@ -924,7 +924,7 @@ function generatePattern() {
   const freqMap = new Map(); // dmcIdx → count
   for (let i = 0; i < W * H; i++) {
     const a = alphaData[i*4+3];
-    if (a < 200) { dmcIndices[i] = TRANSPARENT; continue; }
+    if (a < 240) { dmcIndices[i] = TRANSPARENT; continue; }
     const r = imgData[i*4], g = imgData[i*4+1], b = imgData[i*4+2];
     const idx = nearestDMCIndex(r, g, b);
     dmcIndices[i] = idx;

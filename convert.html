@@ -143,13 +143,6 @@
         <div id="uploadPreview" class="hidden">
           <img id="uploadThumb" class="w-full h-32 object-contain rounded-lg border border-gray-200 bg-gray-50">
         </div>
-        <!-- Remove Background -->
-        <div id="removeBgSection" class="hidden space-y-2">
-          <button type="button" id="removeBgBtn"
-            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-brand-dark text-brand-dark text-sm font-semibold hover:bg-brand-light transition-all">
-            <i class="fa-solid fa-scissors"></i> Remove Background
-          </button>
-        </div>
       </div>
 
       <!-- Dimensions with aspect ratio lock -->
@@ -245,11 +238,6 @@
           <button id="viewPatternBtn" class="px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-semibold text-brand-dark">Pattern</button>
           <button id="viewOriginalBtn" class="px-4 py-1.5 rounded-md text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Original</button>
         </div>
-        <!-- Texture toggle -->
-        <button id="textureToggleBtn" title="Toggle stitch texture"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
-          <i class="fa-solid fa-shapes text-xs"></i> Texture
-        </button>
         <!-- Grid toggle -->
         <button id="gridToggleBtn" title="Toggle grid lines"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
@@ -787,8 +775,7 @@ let uploadedImage = null;
 let currentZoom = 100;
 let currentView = 'pattern';
 let showGrid = true;
-let showTexture = false;
-let aspectLocked = true;
+let aspectLocked = false;
 let aspectRatio = null; // W/H
 let patternData = null; // { grid: Uint16Array, palette: DMC[], W, H, cellSize }
 let originalAspect = null; // image W/H ratio
@@ -823,7 +810,6 @@ function loadFile(file) {
       originalAspect = uploadedImage.naturalWidth / uploadedImage.naturalHeight;
       // Auto-set height from width if locked
       if (aspectLocked) syncHeight();
-      document.getElementById('removeBgSection').classList.remove('hidden');
       showToast('Image loaded! Click Generate Pattern.');
     };
     uploadedImage.src = e.target.result;
@@ -839,10 +825,6 @@ const lockIcon = document.getElementById('lockIcon');
 const aspectNote = document.getElementById('aspectNote');
 const gridWidthEl = document.getElementById('gridWidth');
 const gridHeightEl = document.getElementById('gridHeight');
-
-// Apply initial locked state visuals
-lockBtn.classList.add('bg-brand-light', 'border-brand-dark', 'text-brand-dark');
-lockIcon.className = 'fa-solid fa-lock text-xs';
 
 lockBtn.addEventListener('click', () => {
   aspectLocked = !aspectLocked;
@@ -900,31 +882,16 @@ function generatePattern() {
   const cellH = stitchRatio === 'knit' ? 12 : 10; // knit cells are taller
 
   // Draw image to offscreen canvas at grid resolution
-  // Fill with white first so semi-transparent edge pixels (from bg removal)
-  // blend with white instead of black, preventing dark/muddy color artifacts
   const off = document.createElement('canvas');
   off.width = W; off.height = H;
   const ctx = off.getContext('2d');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, W, H);
   ctx.drawImage(uploadedImage, 0, 0, W, H);
   const imgData = ctx.getImageData(0, 0, W, H).data;
 
-  // Map each pixel to nearest DMC index (0xFFFF = transparent sentinel)
-  // Use alpha from a separate alpha-only canvas to correctly identify transparent pixels,
-  // since the white-filled canvas makes all pixels fully opaque
-  const alphaOff = document.createElement('canvas');
-  alphaOff.width = W; alphaOff.height = H;
-  const alphaCtx = alphaOff.getContext('2d');
-  alphaCtx.drawImage(uploadedImage, 0, 0, W, H);
-  const alphaData = alphaCtx.getImageData(0, 0, W, H).data;
-
-  const TRANSPARENT = 0xFFFF;
+  // Map each pixel to nearest DMC index
   const dmcIndices = new Uint16Array(W * H);
   const freqMap = new Map(); // dmcIdx → count
   for (let i = 0; i < W * H; i++) {
-    const a = alphaData[i*4+3];
-    if (a < 240) { dmcIndices[i] = TRANSPARENT; continue; }
     const r = imgData[i*4], g = imgData[i*4+1], b = imgData[i*4+2];
     const idx = nearestDMCIndex(r, g, b);
     dmcIndices[i] = idx;
@@ -942,7 +909,6 @@ function generatePattern() {
     const paletteLabs = paletteIndices.map(i => DMC_WITH_LAB[i].lab);
     // Re-map excluded pixels to nearest in-palette DMC
     for (let i = 0; i < W * H; i++) {
-      if (dmcIndices[i] === TRANSPARENT) continue;
       if (!paletteSet.has(dmcIndices[i])) {
         const lab = DMC_WITH_LAB[dmcIndices[i]].lab;
         let best = paletteIndices[0], bestDist = Infinity;
@@ -958,64 +924,15 @@ function generatePattern() {
   // Build local palette array (ordered by paletteIndices)
   const palette = paletteIndices.map(i => DMC_WITH_LAB[i]);
 
-  // Crop grid to bounding box of non-transparent pixels
-  let minX = W, maxX = -1, minY = H, maxY = -1;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (dmcIndices[y * W + x] !== TRANSPARENT) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  // Fall back to full grid if no non-transparent pixels found
-  if (maxX === -1) { minX = 0; maxX = W - 1; minY = 0; maxY = H - 1; }
-  const CW = maxX - minX + 1;
-  const CH = maxY - minY + 1;
-  const croppedGrid = new Uint16Array(CW * CH);
-  for (let y = 0; y < CH; y++) {
-    for (let x = 0; x < CW; x++) {
-      croppedGrid[y * CW + x] = dmcIndices[(y + minY) * W + (x + minX)];
-    }
-  }
-
-  // Noise cleanup: replace isolated pixels (no matching neighbor) with most common neighbor color.
-  // Runs twice to catch pixels that become isolated after the first pass.
-  for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < CH; y++) {
-      for (let x = 0; x < CW; x++) {
-        const idx = croppedGrid[y * CW + x];
-        if (idx === TRANSPARENT) continue;
-        const neighbors = [
-          x > 0      ? croppedGrid[y * CW + (x-1)] : null,
-          x < CW-1   ? croppedGrid[y * CW + (x+1)] : null,
-          y > 0      ? croppedGrid[(y-1) * CW + x]  : null,
-          y < CH-1   ? croppedGrid[(y+1) * CW + x]  : null,
-        ].filter(n => n !== null && n !== TRANSPARENT);
-        if (neighbors.length === 0) continue;
-        const hasMatch = neighbors.some(n => n === idx);
-        if (!hasMatch) {
-          // Replace with most common neighbor color
-          const freq = new Map();
-          for (const n of neighbors) freq.set(n, (freq.get(n) || 0) + 1);
-          croppedGrid[y * CW + x] = [...freq.entries()].sort((a,b) => b[1]-a[1])[0][0];
-        }
-      }
-    }
-  }
-
   // Count stitches per palette entry
   const stitchCounts = new Map();
   paletteIndices.forEach(i => stitchCounts.set(i, 0));
-  for (let i = 0; i < CW * CH; i++) {
-    if (croppedGrid[i] === TRANSPARENT) continue;
-    stitchCounts.set(croppedGrid[i], (stitchCounts.get(croppedGrid[i]) || 0) + 1);
+  for (let i = 0; i < W * H; i++) {
+    stitchCounts.set(dmcIndices[i], (stitchCounts.get(dmcIndices[i]) || 0) + 1);
   }
 
   // Store pattern state
-  patternData = { grid: croppedGrid, palette, paletteIndices, stitchCounts, W: CW, H: CH, cellW, cellH };
+  patternData = { grid: dmcIndices, palette, paletteIndices, stitchCounts, W, H, cellW, cellH };
 
   // Render
   renderCanvas();
@@ -1060,87 +977,47 @@ function drawKnitCell(ctx, cx, cy, w, h, r, g, b) {
   ctx.fill();
 }
 
-const AXIS_SIZE = 20; // px reserved for axis labels
-
 function renderCanvas() {
   if (!patternData) return;
   const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
   const canvas = document.getElementById('patternCanvas');
-  canvas.width = W * cellW + AXIS_SIZE;
-  canvas.height = H * cellH + AXIS_SIZE;
+  canvas.width = W * cellW;
+  canvas.height = H * cellH;
   const ctx = canvas.getContext('2d');
 
-  // Axis label background
-  ctx.fillStyle = '#f8f9fa';
-  ctx.fillRect(0, 0, canvas.width, AXIS_SIZE);          // top strip
-  ctx.fillRect(0, 0, AXIS_SIZE, canvas.height);         // left strip
-
-  // Draw cells (offset by AXIS_SIZE)
-  const TRANSPARENT = 0xFFFF;
+  // Draw cells
   const paletteIndexMap = new Map(paletteIndices.map((dmcIdx, pos) => [dmcIdx, pos]));
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const dmcIdx = grid[y * W + x];
-      const px = AXIS_SIZE + x * cellW;
-      const py = AXIS_SIZE + y * cellH;
-      if (dmcIdx === TRANSPARENT) {
-        ctx.fillStyle = '#C8C8C8';
-        ctx.fillRect(px, py, cellW, cellH);
-        continue;
-      }
       const dmc = palette[paletteIndexMap.get(dmcIdx)];
-      if (showTexture) {
-        drawKnitCell(ctx, px, py, cellW, cellH, dmc.r, dmc.g, dmc.b);
-      } else {
-        ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
-        ctx.fillRect(px, py, cellW, cellH);
-      }
+      drawKnitCell(ctx, x * cellW, y * cellH, cellW, cellH, dmc.r, dmc.g, dmc.b);
     }
   }
 
-  // Draw grid lines + axis labels
-  drawGridLines(ctx, W, H, cellW, cellH);
+  // Draw grid lines
+  if (showGrid) drawGridLines(ctx, W, H, cellW, cellH);
 }
 
 function drawGridLines(ctx, W, H, cellW, cellH) {
-  ctx.font = '9px Manrope, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Vertical lines + x-axis labels
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 0.5;
+  // Draw major lines every 10 cells in a slightly darker color
   for (let x = 0; x <= W; x++) {
-    const px = AXIS_SIZE + x * cellW;
-    if (showGrid) {
-      ctx.beginPath();
-      ctx.strokeStyle = x % 10 === 0 ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.1)';
-      ctx.lineWidth = x % 10 === 0 ? 1 : 0.5;
-      ctx.moveTo(px, AXIS_SIZE);
-      ctx.lineTo(px, AXIS_SIZE + H * cellH);
-      ctx.stroke();
-    }
-    if (x % 10 === 0) {
-      ctx.fillStyle = '#777C90';
-      ctx.fillText(x, px, AXIS_SIZE / 2);
-    }
+    ctx.beginPath();
+    if (x % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    ctx.moveTo(x * cellW, 0);
+    ctx.lineTo(x * cellW, H * cellH);
+    ctx.stroke();
   }
-
-  // Horizontal lines + y-axis labels
   for (let y = 0; y <= H; y++) {
-    const py = AXIS_SIZE + y * cellH;
-    if (showGrid) {
-      ctx.beginPath();
-      ctx.strokeStyle = y % 10 === 0 ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.1)';
-      ctx.lineWidth = y % 10 === 0 ? 1 : 0.5;
-      ctx.moveTo(AXIS_SIZE, py);
-      ctx.lineTo(AXIS_SIZE + W * cellW, py);
-      ctx.stroke();
-    }
-    if (y % 10 === 0) {
-      ctx.fillStyle = '#777C90';
-      ctx.textAlign = 'right';
-      ctx.fillText(y, AXIS_SIZE - 3, py);
-      ctx.textAlign = 'center';
-    }
+    ctx.beginPath();
+    if (y % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    ctx.moveTo(0, y * cellH);
+    ctx.lineTo(W * cellH, y * cellH);
+    ctx.stroke();
   }
 }
 
@@ -1208,8 +1085,8 @@ patternCanvas.addEventListener('mousemove', (e) => {
   const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
   const rect = patternCanvas.getBoundingClientRect();
   const scale = currentZoom / 100;
-  const x = Math.floor(((e.clientX - rect.left) / scale - AXIS_SIZE) / cellW);
-  const y = Math.floor(((e.clientY - rect.top) / scale - AXIS_SIZE) / cellH);
+  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
+  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
   if (x < 0 || x >= W || y < 0 || y >= H) { tooltip.style.display = 'none'; return; }
 
   const dmcIdx = grid[y * W + x];
@@ -1231,16 +1108,6 @@ patternCanvas.addEventListener('mousemove', (e) => {
 patternCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Texture Toggle
-// ─────────────────────────────────────────────────────────────────────────────
-const textureToggleBtn = document.getElementById('textureToggleBtn');
-textureToggleBtn.addEventListener('click', () => {
-  showTexture = !showTexture;
-  textureToggleBtn.classList.toggle('bg-brand-light', showTexture);
-  textureToggleBtn.classList.toggle('border-brand-dark', showTexture);
-  if (patternData) renderCanvas();
-});
-
 // Grid Toggle
 // ─────────────────────────────────────────────────────────────────────────────
 const gridToggleBtn = document.getElementById('gridToggleBtn');
@@ -1436,44 +1303,6 @@ function showToast(msg) {
 // Mobile menu toggle
 document.getElementById('mobileMenuBtn').addEventListener('click', function() {
   document.getElementById('mobileMenu').classList.toggle('hidden');
-});
-
-// Background removal result handler
-window.addEventListener('bgRemoved', e => {
-  const url = e.detail.url;
-  uploadedImage = new Image();
-  uploadedImage.onload = () => {
-    originalAspect = uploadedImage.naturalWidth / uploadedImage.naturalHeight;
-    if (aspectLocked) syncHeight();
-  };
-  uploadedImage.src = url;
-  document.getElementById('uploadThumb').src = url;
-  document.getElementById('originalImage').src = url;
-  showToast('Background removed! Click Generate Pattern.');
-});
-</script>
-<script type="module">
-import { removeBackground } from 'https://esm.sh/@imgly/background-removal@1.4.5';
-
-const btn = document.getElementById('removeBgBtn');
-
-btn.addEventListener('click', async () => {
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Removing…';
-  try {
-    const dataUrl = document.getElementById('uploadThumb').src;
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const resultBlob = await removeBackground(blob);
-    const resultUrl = URL.createObjectURL(resultBlob);
-    window.dispatchEvent(new CustomEvent('bgRemoved', { detail: { url: resultUrl } }));
-  } catch (err) {
-    console.error('Background removal failed:', err);
-    window.showToast('Background removal failed. Please try again.');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-scissors"></i> Remove Background';
-  }
 });
 </script>
 </body>

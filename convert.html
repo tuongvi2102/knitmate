@@ -900,19 +900,31 @@ function generatePattern() {
   const cellH = stitchRatio === 'knit' ? 12 : 10; // knit cells are taller
 
   // Draw image to offscreen canvas at grid resolution
+  // Fill with white first so semi-transparent edge pixels (from bg removal)
+  // blend with white instead of black, preventing dark/muddy color artifacts
   const off = document.createElement('canvas');
   off.width = W; off.height = H;
   const ctx = off.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, W, H);
   ctx.drawImage(uploadedImage, 0, 0, W, H);
   const imgData = ctx.getImageData(0, 0, W, H).data;
 
   // Map each pixel to nearest DMC index (0xFFFF = transparent sentinel)
+  // Use alpha from a separate alpha-only canvas to correctly identify transparent pixels,
+  // since the white-filled canvas makes all pixels fully opaque
+  const alphaOff = document.createElement('canvas');
+  alphaOff.width = W; alphaOff.height = H;
+  const alphaCtx = alphaOff.getContext('2d');
+  alphaCtx.drawImage(uploadedImage, 0, 0, W, H);
+  const alphaData = alphaCtx.getImageData(0, 0, W, H).data;
+
   const TRANSPARENT = 0xFFFF;
   const dmcIndices = new Uint16Array(W * H);
   const freqMap = new Map(); // dmcIdx → count
   for (let i = 0; i < W * H; i++) {
-    const a = imgData[i*4+3];
-    if (a < 128) { dmcIndices[i] = TRANSPARENT; continue; }
+    const a = alphaData[i*4+3];
+    if (a < 200) { dmcIndices[i] = TRANSPARENT; continue; }
     const r = imgData[i*4], g = imgData[i*4+1], b = imgData[i*4+2];
     const idx = nearestDMCIndex(r, g, b);
     dmcIndices[i] = idx;

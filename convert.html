@@ -981,6 +981,31 @@ function generatePattern() {
     }
   }
 
+  // Noise cleanup: replace isolated pixels (no matching neighbor) with most common neighbor color.
+  // Runs twice to catch pixels that become isolated after the first pass.
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < CH; y++) {
+      for (let x = 0; x < CW; x++) {
+        const idx = croppedGrid[y * CW + x];
+        if (idx === TRANSPARENT) continue;
+        const neighbors = [
+          x > 0      ? croppedGrid[y * CW + (x-1)] : null,
+          x < CW-1   ? croppedGrid[y * CW + (x+1)] : null,
+          y > 0      ? croppedGrid[(y-1) * CW + x]  : null,
+          y < CH-1   ? croppedGrid[(y+1) * CW + x]  : null,
+        ].filter(n => n !== null && n !== TRANSPARENT);
+        if (neighbors.length === 0) continue;
+        const hasMatch = neighbors.some(n => n === idx);
+        if (!hasMatch) {
+          // Replace with most common neighbor color
+          const freq = new Map();
+          for (const n of neighbors) freq.set(n, (freq.get(n) || 0) + 1);
+          croppedGrid[y * CW + x] = [...freq.entries()].sort((a,b) => b[1]-a[1])[0][0];
+        }
+      }
+    }
+  }
+
   // Count stitches per palette entry
   const stitchCounts = new Map();
   paletteIndices.forEach(i => stitchCounts.set(i, 0));

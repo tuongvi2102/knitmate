@@ -946,16 +946,39 @@ function generatePattern() {
   // Build local palette array (ordered by paletteIndices)
   const palette = paletteIndices.map(i => DMC_WITH_LAB[i]);
 
+  // Crop grid to bounding box of non-transparent pixels
+  let minX = W, maxX = -1, minY = H, maxY = -1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (dmcIndices[y * W + x] !== TRANSPARENT) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  // Fall back to full grid if no non-transparent pixels found
+  if (maxX === -1) { minX = 0; maxX = W - 1; minY = 0; maxY = H - 1; }
+  const CW = maxX - minX + 1;
+  const CH = maxY - minY + 1;
+  const croppedGrid = new Uint16Array(CW * CH);
+  for (let y = 0; y < CH; y++) {
+    for (let x = 0; x < CW; x++) {
+      croppedGrid[y * CW + x] = dmcIndices[(y + minY) * W + (x + minX)];
+    }
+  }
+
   // Count stitches per palette entry
   const stitchCounts = new Map();
   paletteIndices.forEach(i => stitchCounts.set(i, 0));
-  for (let i = 0; i < W * H; i++) {
-    if (dmcIndices[i] === TRANSPARENT) continue;
-    stitchCounts.set(dmcIndices[i], (stitchCounts.get(dmcIndices[i]) || 0) + 1);
+  for (let i = 0; i < CW * CH; i++) {
+    if (croppedGrid[i] === TRANSPARENT) continue;
+    stitchCounts.set(croppedGrid[i], (stitchCounts.get(croppedGrid[i]) || 0) + 1);
   }
 
   // Store pattern state
-  patternData = { grid: dmcIndices, palette, paletteIndices, stitchCounts, W, H, cellW, cellH };
+  patternData = { grid: croppedGrid, palette, paletteIndices, stitchCounts, W: CW, H: CH, cellW, cellH };
 
   // Render
   renderCanvas();

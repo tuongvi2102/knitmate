@@ -775,7 +775,7 @@ let uploadedImage = null;
 let currentZoom = 100;
 let currentView = 'pattern';
 let showGrid = true;
-let aspectLocked = false;
+let aspectLocked = true;
 let aspectRatio = null; // W/H
 let patternData = null; // { grid: Uint16Array, palette: DMC[], W, H, cellSize }
 let originalAspect = null; // image W/H ratio
@@ -843,6 +843,10 @@ lockBtn.addEventListener('click', () => {
 
 gridWidthEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncHeight(); });
 gridHeightEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncWidth(); });
+
+// Apply default locked state visuals
+lockBtn.classList.add('bg-brand-light', 'border-brand-dark', 'text-brand-dark');
+lockIcon.className = 'fa-solid fa-lock text-xs';
 
 function syncHeight() {
   const w = parseInt(gridWidthEl.value) || 80;
@@ -949,32 +953,8 @@ function generatePattern() {
 }
 
 function drawKnitCell(ctx, cx, cy, w, h, r, g, b) {
-  // Light background fill
-  ctx.fillStyle = `rgb(${Math.min(255,r+45)},${Math.min(255,g+45)},${Math.min(255,b+45)})`;
-  ctx.fillRect(cx, cy, w, h);
-
-  // V shape in main color
   ctx.fillStyle = `rgb(${r},${g},${b})`;
-  const aw = w * 0.38; // arm width at top
-  const bw = w * 0.12; // arm width at bottom where arms meet
-
-  // Left arm of V
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + aw, cy);
-  ctx.lineTo(cx + w / 2 + bw / 2, cy + h);
-  ctx.lineTo(cx + w / 2 - bw / 2, cy + h);
-  ctx.closePath();
-  ctx.fill();
-
-  // Right arm of V
-  ctx.beginPath();
-  ctx.moveTo(cx + w - aw, cy);
-  ctx.lineTo(cx + w, cy);
-  ctx.lineTo(cx + w / 2 + bw / 2, cy + h);
-  ctx.lineTo(cx + w / 2 - bw / 2, cy + h);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillRect(cx, cy, w, h);
 }
 
 function renderCanvas() {

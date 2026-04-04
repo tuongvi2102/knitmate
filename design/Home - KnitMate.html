@@ -1,0 +1,531 @@
+<html lang="en">
+
+  <head><script>
+(function() {
+  var H = 920;
+
+  // Override window.innerHeight for JS that reads it to compute heights
+  try {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: function() { return H; } });
+  } catch(e) {}
+
+  function vhToPx(s) {
+    return s.replace(/([0-9.]+)(dvh|svh|lvh|vh)/g, function(_, n, unit) {
+      if (parseFloat(n) === 100) return n + unit;
+      return (parseFloat(n) * H / 100) + 'px';
+    });
+  }
+
+  // Patch CSS values (not selectors) recursively through @layer/@media/@supports
+  function patchRules(rules) {
+    try {
+      for (var i = 0; i < rules.length; i++) {
+        var rule = rules[i];
+        if (rule.cssRules) patchRules(rule.cssRules); // recurse into at-rules
+        if (!rule.style) continue;
+        for (var j = 0; j < rule.style.length; j++) {
+          var prop = rule.style[j];
+          var val = rule.style.getPropertyValue(prop);
+          if (val.indexOf('vh') === -1) continue;
+          rule.style.setProperty(prop, vhToPx(val), rule.style.getPropertyPriority(prop));
+        }
+      }
+    } catch(e) {}
+  }
+  function patchSheet(sheet) {
+    try { patchRules(sheet.cssRules || []); } catch(e) {}
+  }
+
+  try {
+    var _ins = CSSStyleSheet.prototype.insertRule;
+    CSSStyleSheet.prototype.insertRule = function(rule, index) {
+      var idx = _ins.call(this, rule, index);
+      try { if (this.cssRules && this.cssRules[idx]) patchRules([this.cssRules[idx]]); } catch(e) {}
+      return idx;
+    };
+  } catch(e) {}
+
+  try {
+    var _rs = CSSStyleSheet.prototype.replaceSync;
+    if (_rs) {
+      CSSStyleSheet.prototype.replaceSync = function(text) {
+        _rs.call(this, text);
+        patchSheet(this);
+      };
+    }
+  } catch(e) {}
+
+  try {
+    var _r = CSSStyleSheet.prototype.replace;
+    if (_r) {
+      CSSStyleSheet.prototype.replace = function(text) {
+        var self = this;
+        return _r.call(this, text).then(function(sheet) { patchSheet(sheet || self); return sheet || self; });
+      };
+    }
+  } catch(e) {}
+
+  // ─── DOM-LEVEL FALLBACK (Tailwind v3 / plain <style> textContent updates) ─
+  function fixInlineVh(el) {
+    var s = el.getAttribute && el.getAttribute('style');
+    if (s && s.indexOf('vh') !== -1) el.setAttribute('style', vhToPx(s));
+  }
+
+  function watchStyleEl(el) {
+    if (!el || el.getAttribute('data-vh-fix') || el._vhWatched) return;
+    el._vhWatched = true;
+    if (el.sheet) patchSheet(el.sheet);
+    try {
+      new MutationObserver(function() { if (el.sheet) patchSheet(el.sheet); })
+        .observe(el, { childList: true, subtree: true, characterData: true });
+    } catch(e) {}
+  }
+
+  function applyFixes() {
+    document.documentElement.style.setProperty('--vh', (H / 100) + 'px');
+    document.querySelectorAll('[style]').forEach(fixInlineVh);
+    document.querySelectorAll('style').forEach(watchStyleEl);
+    try { (document.adoptedStyleSheets || []).forEach(patchSheet); } catch(e) {}
+    try {
+      new MutationObserver(function(muts) {
+        muts.forEach(function(m) {
+          m.addedNodes.forEach(function(node) {
+            if (node.nodeType !== 1) return;
+            if (node.tagName === 'STYLE') watchStyleEl(node);
+            fixInlineVh(node);
+            if (node.querySelectorAll) node.querySelectorAll('[style]').forEach(fixInlineVh);
+          });
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    } catch(e) {}
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyFixes);
+  else applyFixes();
+
+  window.addEventListener('load', function() {
+    document.querySelectorAll('style').forEach(watchStyleEl);
+    document.querySelectorAll('[style]').forEach(fixInlineVh);
+    try { (document.adoptedStyleSheets || []).forEach(patchSheet); } catch(e) {}
+  });
+})();
+</script>
+    <script>
+      window.FontAwesomeConfig = {
+        autoReplaceSvg: 'nest'
+      };
+    </script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Creative Tools</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme:
+        {
+          extend:
+          {
+            colors:
+            {
+              primary: '#FF6B35', // Orange from inspiration
+              secondary: '#2B2D42', // Dark blue/gray from inspiration
+              accent: '#00C896', // Green from inspiration
+              light: '#F8F9FA',
+            },
+            fontFamily:
+            {
+              sans: ['Inter', 'sans-serif'],
+              heading: ['Poppins', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@500;600;700;800&amp;display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+      body
+      {
+        font-family: 'Inter', sans-serif;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6
+      {
+        font-family: 'Poppins', sans-serif;
+      }
+
+      .gradient-text
+      {
+        background: linear-gradient(90deg, #FF6B35, #FF8E53);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .hero-bg
+      {
+        background: radial-gradient(circle at top right, rgba(255, 107, 53, 0.1), transparent 40%),
+          radial-gradient(circle at bottom left, rgba(0, 200, 150, 0.1), transparent 40%);
+      }
+    </style>
+    <style data-grapesjs-styles="true">
+      #i0n8q
+      {
+        animation-duration: 3s;
+      }
+
+      #i750s
+      {
+        animation-duration: 4s;
+        animation-delay: 1s;
+      }
+    </style>
+  </head>
+
+  <body
+    class="w-full min-h-screen bg-white text-gray-800 m-0 p-0 overflow-x-hidden">
+    <!-- Navigation -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Creative Tools</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@500;600;700;800&amp;display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Creative Tools</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@500;600;700;800&amp;display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <nav id="header"
+      class="w-full bg-white/90 backdrop-blur-md fixed top-0 z-50 border-b border-gray-100">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-20">
+          <!-- Logo -->
+          <div class="flex-shrink-0 flex items-center cursor-pointer">
+            <div
+              class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-xl mr-2">
+              <i class="fa-solid fa-palette"></i></div><span id="iseqb"
+              class="font-heading font-bold text-2xl text-secondary text-[#B2967D]">KnitMate</span>
+          </div><!-- Desktop Menu -->
+          <div class="hidden md:flex space-x-8 items-center"><a href="#"
+              id="iiqz9"
+              class="text-gray-600 hover:text-primary font-medium transition-colors text-[#B2967D]">Home</a><a
+              href="#features" id="is2f5"
+              class="text-gray-600 hover:text-primary font-medium transition-colors text-[#B2967D]">Convert
+              Image</a><a href="#convert" id="ippjg"
+              class="text-gray-600 hover:text-primary font-medium transition-colors text-[#B2967D]">Design
+              Colorwork</a><a href="#patterns" id="ifbej"
+              class="text-gray-600 hover:text-primary font-medium transition-colors text-[#B2967D]">Free
+              Patterns</a><a href="#pricing" id="ixpzz"
+              class="text-gray-600 hover:text-primary font-medium transition-colors text-[#B2967D]"><br></a>
+          </div><!-- CTA & Mobile Toggle -->
+          <div class="flex items-center space-x-4"><a href="#"
+              class="hidden lg:block text-gray-600 hover:text-primary font-medium">Log
+              in</a><button
+              class="bg-primary hover:bg-orange-600 text-white px-6 py-2.5 rounded-full font-medium transition-all transform hover:scale-105 shadow-lg shadow-primary/30">
+              Get Started
+            </button><button
+              class="md:hidden text-gray-600 hover:text-primary text-2xl"><i
+                class="fa-solid fa-bars"></i></button></div>
+        </div>
+      </div>
+    </nav><!-- Hero Section -->
+    <section id="hero"
+      class="pt-32 pb-20 lg:pt-40 lg:pb-28 hero-bg w-full relative overflow-hidden">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div
+          class="flex flex-col lg:flex-row items-center justify-between gap-12">
+          <!-- Hero Content -->
+          <div class="w-full lg:w-1/2 text-center lg:text-left">
+            <div
+              class="inline-flex items-center px-4 py-2 rounded-full bg-orange-50 text-primary font-medium text-sm mb-6 border border-orange-100">
+              <span class="flex h-2 w-2 rounded-full bg-primary mr-2"></span>
+              New: AI Pattern Generator available now!
+            </div>
+            <h1 id="iapq7"
+              class="text-5xl lg:text-6xl font-extrabold text-secondary leading-tight mb-6 text-[#B2967D]">
+              Make your own pattern</h1><span id="imwjp"
+              class="gradient-text"></span>
+            <p
+              class="text-lg text-gray-600 mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              The all-in-one platform for creators. Convert images seamlessly,
+              design stunning colorworks, and access thousands of free patterns
+              to elevate your projects.
+            </p>
+            <div
+              class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+              <button id="ijtuz"
+                class="w-full sm:w-auto bg-primary hover:bg-orange-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:-translate-y-1 shadow-xl shadow-primary/30 flex items-center justify-center bg-[#E6BEAE]">
+                Start Creating Free
+                <i class="fa-solid fa-arrow-right ml-2"></i></button><button
+                class="w-full sm:w-auto bg-white hover:bg-gray-50 text-secondary border-2 border-gray-200 px-8 py-4 rounded-full font-semibold text-lg transition-all flex items-center justify-center"><i
+                  class="fa-solid fa-play text-primary mr-2"></i>
+                Watch Demo
+              </button></div>
+            <div
+              class="mt-10 flex items-center justify-center lg:justify-start space-x-4">
+              <div class="flex -space-x-3"><img
+                  src="https://storage.googleapis.com/uxpilot-auth.appspot.com/2cc26b0b77-7f4e40f0fdb0e6b26ce9.png"
+                  alt="portrait of a smiling woman professional"
+                  class="w-10 h-10 rounded-full border-2 border-white object-cover"><img
+                  src="https://storage.googleapis.com/uxpilot-auth.appspot.com/409c34df90-8ed41d2aead17e02bcd6.png"
+                  alt="portrait of a young creative man"
+                  class="w-10 h-10 rounded-full border-2 border-white object-cover"><img
+                  src="https://storage.googleapis.com/uxpilot-auth.appspot.com/1d0c48ffe4-aee5607194026ff1dd35.png"
+                  alt="portrait of a female designer"
+                  class="w-10 h-10 rounded-full border-2 border-white object-cover">
+                <div
+                  class="w-10 h-10 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                  +2k
+                </div>
+              </div>
+              <p class="text-sm text-gray-500 font-medium">Trusted by 2,000+
+                knitter worldwide</p>
+            </div>
+          </div><!-- Hero Image -->
+          <div class="w-full lg:w-1/2 relative">
+            <div
+              class="absolute inset-0 bg-gradient-to-tr from-primary/20 to-accent/20 rounded-3xl transform rotate-3 scale-105 blur-lg">
+            </div>
+            <div
+              class="relative bg-white p-4 rounded-3xl shadow-2xl border border-gray-100">
+              <img
+                src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3R5bGU9ImZpbGw6IHJnYmEoMCwwLDAsMC4xNSk7IHRyYW5zZm9ybTogc2NhbGUoMC43NSkiPgogICAgICAgIDxwYXRoIGQ9Ik04LjUgMTMuNWwyLjUgMyAzLjUtNC41IDQuNSA2SDVtMTYgMVY1YTIgMiAwIDAgMC0yLTJINWMtMS4xIDAtMiAuOS0yIDJ2MTRjMCAxLjEuOSAyIDIgMmgxNGMxLjEgMCAyLS45IDItMnoiPjwvcGF0aD4KICAgICAgPC9zdmc+"
+                alt="modern abstract digital art workspace showing color palettes and patterns"
+                class="w-full h-auto rounded-2xl object-cover">
+              <!-- Floating Elements -->
+              <div id="i0n8q"
+                class="absolute -left-8 top-1/4 bg-white p-4 rounded-xl shadow-xl border border-gray-100 animate-bounce">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-accent">
+                    <i class="fa-solid fa-check"></i></div>
+                  <div>
+                    <p class="text-sm font-bold text-secondary">Conversion Done
+                    </p>
+                    <p class="text-xs text-gray-500">0.2 seconds</p>
+                  </div>
+                </div>
+              </div>
+              <div id="i750s"
+                class="absolute -right-6 bottom-1/4 bg-white p-3 rounded-xl shadow-xl border border-gray-100 animate-bounce">
+                <div class="flex gap-2">
+                  <div class="w-6 h-6 rounded-full bg-[#FF6B35]"></div>
+                  <div class="w-6 h-6 rounded-full bg-[#2B2D42]"></div>
+                  <div class="w-6 h-6 rounded-full bg-[#00C896]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section><!-- Main Functions Section -->
+    <section id="features" class="py-20 bg-light w-full">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-3xl mx-auto mb-16">
+          <h2 class="text-3xl md:text-4xl font-bold text-secondary mb-4">Three
+            powerful tools. <br>One seamless workflow.</h2>
+          <p class="text-gray-600 text-lg">Everything you need to bring your
+            visual ideas to life, from format conversion to complex pattern
+            generation.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <!-- Feature 1 -->
+          <div
+            class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
+            <div id="iqg80m"
+              class="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center text-primary text-2xl mb-6 group-hover:scale-110 transition-transform">
+              <i class="fa-solid fa-image"></i></div>
+            <h3 class="text-2xl font-bold text-secondary mb-3">Convert Image
+            </h3>
+            <p class="text-gray-600 mb-6 leading-relaxed">Instantly convert
+              images into pattern</p><a href="#convert"
+              class="text-primary font-semibold flex items-center hover:text-orange-600 transition-colors">
+              Try Converter <i
+                class="fa-solid fa-arrow-right ml-2 text-sm"></i></a>
+          </div><!-- Feature 2 -->
+          <div
+            class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
+            <div id="ikjf02"
+              class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 text-2xl mb-6 group-hover:scale-110 transition-transform bg-[#FFF7ED]">
+              <i class="fa-solid fa-fill-drip"></i></div>
+            <h3 class="text-2xl font-bold text-secondary mb-3">Design Colorwork
+            </h3>
+            <p class="text-gray-600 mb-6 leading-relaxed">Extract palettes from
+              images, generate complementary colors, and test combinations for
+              your next big project.</p><a href="#colorwork"
+              class="text-blue-500 font-semibold flex items-center hover:text-blue-600 transition-colors">
+              Explore Colors <i
+                class="fa-solid fa-arrow-right ml-2 text-sm"></i></a>
+          </div><!-- Feature 3 -->
+          <div
+            class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
+            <div id="ifrbk8"
+              class="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center text-accent text-2xl mb-6 group-hover:scale-110 transition-transform bg-[#FFF7ED]">
+              <i class="fa-solid fa-shapes"></i></div>
+            <h3 class="text-2xl font-bold text-secondary mb-3">Free Patterns
+            </h3>
+            <p class="text-gray-600 mb-6 leading-relaxed">Access our library of
+              5,000+ seamless patterns. Customize colors, scale, and download in
+              vector formats.</p><a href="#patterns"
+              class="text-accent font-semibold flex items-center hover:text-green-600 transition-colors">
+              Browse Patterns <i
+                class="fa-solid fa-arrow-right ml-2 text-sm"></i></a>
+          </div>
+        </div>
+      </div>
+    </section><!-- Convert Tool Preview -->
+    <!-- Colorwork & Patterns Section -->
+    <section id="patterns" class="py-24 bg-light w-full">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-3xl mx-auto mb-16">
+          <h2 class="text-3xl md:text-4xl font-bold text-secondary mb-4">Sample
+            Works &amp; Inspiration</h2>
+          <p class="text-gray-600 text-lg">Explore what's possible with our
+            pattern generator and color tools.</p>
+        </div><!-- Gallery Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Item 1 -->
+          <div
+            class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer">
+            <div class="h-48 overflow-hidden relative"><img
+                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/df56be2800-c6ecc39e13c80418cbbf.png"
+                alt="abstract geometric seamless pattern with modern vibrant colors"
+                class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+              <div
+                class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <button
+                  class="bg-white text-secondary px-4 py-2 rounded-full font-medium text-sm hover:bg-primary hover:text-white transition-colors">
+                  Edit Pattern
+                </button></div>
+            </div>
+            <div class="p-4 border-t border-gray-100">
+              <h4 class="font-bold text-secondary">Memphis Geometric</h4>
+              <div class="flex gap-1 mt-2">
+                <div class="w-4 h-4 rounded-full bg-[#FF6B35]"></div>
+                <div class="w-4 h-4 rounded-full bg-[#2B2D42]"></div>
+                <div class="w-4 h-4 rounded-full bg-[#00C896]"></div>
+                <div
+                  class="w-4 h-4 rounded-full bg-[#F8F9FA] border border-gray-200">
+                </div>
+              </div>
+            </div>
+          </div><!-- Item 2 -->
+          <div
+            class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer">
+            <div class="h-48 overflow-hidden relative"><img
+                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/d870d9cb2e-366a55e9347df0adf444.png"
+                alt="minimalist continuous line art pattern seamless"
+                class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+              <div
+                class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <button
+                  class="bg-white text-secondary px-4 py-2 rounded-full font-medium text-sm hover:bg-primary hover:text-white transition-colors">
+                  Edit Pattern
+                </button></div>
+            </div>
+            <div class="p-4 border-t border-gray-100">
+              <h4 class="font-bold text-secondary">Minimalist Line Art</h4>
+              <div class="flex gap-1 mt-2">
+                <div class="w-4 h-4 rounded-full bg-[#1A1A1A]"></div>
+                <div
+                  class="w-4 h-4 rounded-full bg-[#FAFAFA] border border-gray-200">
+                </div>
+              </div>
+            </div>
+          </div><!-- Item 3 -->
+          <div
+            class="bg-white rounded-xl overflow-hidden shadow-md group cursor-pointer">
+            <div class="h-48 overflow-hidden relative"><img
+                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/14001b066b-0bda924897cbc1d2599f.png"
+                alt="fluid gradient mesh abstract colorful background"
+                class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+              <div
+                class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <button
+                  class="bg-white text-secondary px-4 py-2 rounded-full font-medium text-sm hover:bg-primary hover:text-white transition-colors">
+                  View Palette
+                </button></div>
+            </div>
+            <div class="p-4 border-t border-gray-100">
+              <h4 class="font-bold text-secondary">Fluid Gradient</h4>
+              <div class="flex gap-1 mt-2">
+                <div class="w-4 h-4 rounded-full bg-[#FF3366]"></div>
+                <div class="w-4 h-4 rounded-full bg-[#9933FF]"></div>
+                <div class="w-4 h-4 rounded-full bg-[#00CCFF]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-center mt-12"><button
+            class="bg-white border-2 border-gray-200 text-secondary hover:border-primary hover:text-primary px-8 py-3 rounded-full font-semibold transition-all">View
+            All Patterns&nbsp;</button></div>
+      </div>
+    </section><!-- Pricing Section -->
+    <!-- CTA Section -->
+    <section class="py-20 bg-secondary w-full relative overflow-hidden">
+      <div class="absolute inset-0 opacity-10"></div>
+    </section><!-- Footer -->
+  
+  <script>
+    (function() {
+      // Block <a href="…"> navigation unconditionally.
+      // ONLY e.preventDefault() — onclick handlers on anchors still fire so all
+      // JavaScript UI bindings (tabs, dropdowns, modals) work as expected.
+      document.addEventListener('click', function(e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        e.preventDefault();
+      }, true);
+
+      // Block window.open
+      try { window.open = function() { return null; }; } catch (_) {}
+
+      // Block history navigation APIs
+      try {
+        history.pushState = function() {};
+        history.replaceState = function() {};
+      } catch (_) {}
+
+      // Block location.assign and location.replace
+      try {
+        if (window.location) {
+          window.location.assign = function() {};
+          window.location.replace = function() {};
+        }
+      } catch (_) {}
+
+      // Block window.location.href = '…' and location.href = '…' direct assignments.
+      // Override the href setter on Location.prototype (iframe-local, does not affect parent).
+      try {
+        var _locProto = Location.prototype;
+        var _hrefDesc = Object.getOwnPropertyDescriptor(_locProto, 'href');
+        if (_hrefDesc && typeof _hrefDesc.set === 'function') {
+          Object.defineProperty(_locProto, 'href', {
+            get: _hrefDesc.get,
+            set: function() { /* navigation blocked — onclick already ran */ },
+            configurable: true,
+            enumerable: true,
+          });
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+
+</html>

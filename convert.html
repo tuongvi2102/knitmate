@@ -1130,6 +1130,18 @@ patternCanvas.addEventListener('mousemove', (e) => {
 
 patternCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
+patternCanvas.addEventListener('click', (e) => {
+  if (!patternData) return;
+  const { grid, W, H, cellW, cellH } = patternData;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
+  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const dmcIdx = grid[y * W + x];
+  openColorReplaceModal(dmcIdx);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Grid Toggle
 // ─────────────────────────────────────────────────────────────────────────────

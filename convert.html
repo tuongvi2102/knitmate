@@ -279,6 +279,16 @@
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
           <i class="fa-solid fa-border-all text-xs"></i> Grid
         </button>
+        <div class="w-px h-6 bg-gray-200"></div>
+        <!-- Undo / Redo -->
+        <button id="undoBtn" title="Undo (Ctrl+Z)" disabled
+          class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-rotate-left text-xs"></i>
+        </button>
+        <button id="redoBtn" title="Redo (Ctrl+Y)" disabled
+          class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-rotate-right text-xs"></i>
+        </button>
       </div>
       <div class="flex items-center gap-3">
         <button id="zoomOutBtn" class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all">
@@ -815,6 +825,9 @@ let aspectLocked = true;
 let aspectRatio = null; // W/H
 let patternData = null; // { grid: Uint16Array, palette: DMC[], W, H, cellSize }
 let originalAspect = null; // image W/H ratio
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 40;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload
@@ -973,6 +986,9 @@ function generatePattern() {
 
   // Store pattern state
   patternData = { grid: dmcIndices, palette, paletteIndices, stitchCounts, W, H, cellW, cellH };
+  undoStack.length = 0;
+  redoStack.length = 0;
+  updateUndoRedoBtns();
 
   // Render
   renderCanvas();
@@ -1390,8 +1406,57 @@ function renderColorReplaceList(query, highlightIdx = null) {
   }
 }
 
+function snapshotPatternData() {
+  const { grid, palette, paletteIndices, stitchCounts } = patternData;
+  return {
+    grid: new Uint16Array(grid),
+    palette: palette.slice(),
+    paletteIndices: paletteIndices.slice(),
+    stitchCounts: new Map(stitchCounts),
+  };
+}
+
+function restoreSnapshot(snap) {
+  patternData.grid = snap.grid;
+  patternData.palette = snap.palette;
+  patternData.paletteIndices = snap.paletteIndices;
+  patternData.stitchCounts = snap.stitchCounts;
+  renderCanvas();
+  renderLegend();
+  renderSummary();
+}
+
+function updateUndoRedoBtns() {
+  document.getElementById('undoBtn').disabled = undoStack.length === 0;
+  document.getElementById('redoBtn').disabled = redoStack.length === 0;
+}
+
+function saveUndoState() {
+  undoStack.push(snapshotPatternData());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoRedoBtns();
+}
+
+function undo() {
+  if (!patternData || undoStack.length === 0) return;
+  redoStack.push(snapshotPatternData());
+  restoreSnapshot(undoStack.pop());
+  updateUndoRedoBtns();
+  showToast('Undone');
+}
+
+function redo() {
+  if (!patternData || redoStack.length === 0) return;
+  undoStack.push(snapshotPatternData());
+  restoreSnapshot(redoStack.pop());
+  updateUndoRedoBtns();
+  showToast('Redone');
+}
+
 function replacePatternColor(oldDmcIdx, newDmcIdx) {
   if (!patternData || oldDmcIdx === newDmcIdx) return;
+  saveUndoState();
   const { grid, palette, paletteIndices, stitchCounts, W, H } = patternData;
 
   const oldCount = stitchCounts.get(oldDmcIdx) || 0;
@@ -1474,6 +1539,18 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
+
+// Undo / Redo buttons
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  }
+});
 
 // Mobile menu toggle
 document.getElementById('mobileMenuBtn').addEventListener('click', function() {

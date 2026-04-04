@@ -1155,7 +1155,7 @@ patternCanvas.addEventListener('click', (e) => {
   const y = Math.floor((e.clientY - rect.top) / scale / cellH);
   if (x < 0 || x >= W || y < 0 || y >= H) return;
   const dmcIdx = grid[y * W + x];
-  openColorReplaceModal(dmcIdx);
+  openColorReplaceModal(dmcIdx, { x, y });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1343,9 +1343,11 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
 // Color Replace Modal
 // ─────────────────────────────────────────────────────────────────────────────
 let colorReplaceTarget = null; // oldDmcIdx
+let colorReplacePixel = null;  // {x, y} when replacing a single pixel, null for full replace
 
-function openColorReplaceModal(dmcIdx) {
+function openColorReplaceModal(dmcIdx, pixel) {
   colorReplaceTarget = dmcIdx;
+  colorReplacePixel = pixel || null;
   const dmc = DMC_WITH_LAB[dmcIdx];
   document.getElementById('crCurrentSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
   document.getElementById('crCurrentId').textContent = `DMC ${dmc.id}`;
@@ -1364,6 +1366,7 @@ function openColorReplaceModal(dmcIdx) {
 function closeColorReplaceModal() {
   document.getElementById('colorReplaceModal').classList.add('hidden');
   document.body.style.overflow = '';
+  colorReplacePixel = null;
 }
 
 function renderColorReplaceList(query, highlightIdx = null) {
@@ -1389,7 +1392,11 @@ function renderColorReplaceList(query, highlightIdx = null) {
       <span class="text-sm text-brand-darker truncate">${dmc.name}</span>
     `;
     item.addEventListener('click', () => {
-      replacePatternColor(colorReplaceTarget, dmcIdx);
+      if (colorReplacePixel) {
+        replaceSinglePixel(colorReplacePixel.x, colorReplacePixel.y, dmcIdx);
+      } else {
+        replacePatternColor(colorReplaceTarget, dmcIdx);
+      }
       closeColorReplaceModal();
     });
     list.appendChild(item);
@@ -1452,6 +1459,46 @@ function redo() {
   restoreSnapshot(redoStack.pop());
   updateUndoRedoBtns();
   showToast('Redone');
+}
+
+function replaceSinglePixel(x, y, newDmcIdx) {
+  if (!patternData) return;
+  const { grid, palette, paletteIndices, stitchCounts, W } = patternData;
+  const idx = y * W + x;
+  const oldDmcIdx = grid[idx];
+  if (oldDmcIdx === newDmcIdx) return;
+
+  saveUndoState();
+
+  // Update grid
+  grid[idx] = newDmcIdx;
+
+  // Update stitch counts
+  const oldCount = stitchCounts.get(oldDmcIdx) || 0;
+  if (oldCount <= 1) {
+    stitchCounts.delete(oldDmcIdx);
+    // Remove from palette if no pixels remain
+    const oldPos = paletteIndices.indexOf(oldDmcIdx);
+    if (oldPos !== -1) {
+      palette.splice(oldPos, 1);
+      paletteIndices.splice(oldPos, 1);
+    }
+  } else {
+    stitchCounts.set(oldDmcIdx, oldCount - 1);
+  }
+
+  if (!paletteIndices.includes(newDmcIdx)) {
+    paletteIndices.push(newDmcIdx);
+    palette.push(DMC_WITH_LAB[newDmcIdx]);
+    stitchCounts.set(newDmcIdx, 1);
+  } else {
+    stitchCounts.set(newDmcIdx, (stitchCounts.get(newDmcIdx) || 0) + 1);
+  }
+
+  renderCanvas();
+  renderLegend();
+  renderSummary();
+  showToast('Pixel color changed!');
 }
 
 function replacePatternColor(oldDmcIdx, newDmcIdx) {

@@ -82,8 +82,41 @@
 <!-- Toast -->
 <div id="toast"></div>
 
-<!-- Hidden color input for swatch color changing -->
-<input type="color" id="colorReplacer" style="position:fixed;left:-200px;top:-200px;width:1px;height:1px;opacity:0">
+<!-- Color Replace Modal -->
+<div id="colorReplaceModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.5)">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col" style="max-height:80vh">
+    <div class="p-5 border-b border-gray-100">
+      <h3 class="text-lg font-bold text-brand-dark mb-3">Replace Color</h3>
+      <div class="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
+        <div id="crCurrentSwatch" class="w-8 h-8 rounded-lg border border-gray-200 flex-shrink-0"></div>
+        <div class="flex-1 min-w-0">
+          <div id="crCurrentId" class="text-sm font-bold text-brand-dark"></div>
+          <div id="crCurrentName" class="text-xs text-brand-gray truncate"></div>
+        </div>
+        <span class="text-xs text-brand-gray flex-shrink-0">→ choose below</span>
+      </div>
+      <!-- Custom color picker -->
+      <div class="mb-3">
+        <p class="text-xs text-brand-gray mb-2">Or pick any color</p>
+        <div class="flex items-center gap-2">
+          <div id="crPickerPreview" class="w-9 h-9 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-brand-dark transition-colors" title="Click to open color picker" style="background:#cccccc"></div>
+          <input type="color" id="crColorNative" class="sr-only" tabindex="-1">
+          <input id="crHexInput" type="text" placeholder="#RRGGBB" maxlength="7" spellcheck="false"
+            class="w-28 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand-dark font-mono uppercase">
+          <div id="crNearestInfo" class="hidden flex items-center gap-1.5 flex-1 min-w-0">
+            <div id="crNearestSwatch" class="w-5 h-5 rounded border border-gray-200 flex-shrink-0"></div>
+            <span id="crNearestLabel" class="text-xs font-semibold text-brand-dark truncate"></span>
+          </div>
+        </div>
+      </div>
+      <input id="crSearch" type="text" placeholder="Search DMC number or name…" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand-dark">
+    </div>
+    <div id="crList" class="overflow-y-auto flex-1 p-2"></div>
+    <div class="p-4 border-t border-gray-100">
+      <button id="crCancelBtn" class="w-full py-2 text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- Navigation -->
 <nav class="w-full bg-white/90 backdrop-blur-md fixed top-0 z-50 border-b border-bluegray">
@@ -1022,7 +1055,7 @@ function renderLegend() {
     row.innerHTML = `
       <td class="py-2.5 pr-2 text-xs text-brand-gray">${i + 1}</td>
       <td class="py-2.5 pr-3">
-        <div class="w-7 h-7 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-brand-dark transition-all" data-palette-pos="${palettePos}" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})" title="Click to change color"></div>
+        <div class="w-7 h-7 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-brand-dark transition-all" data-dmc-idx="${paletteIndices[palettePos]}" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})" title="Click to replace color"></div>
       </td>
       <td class="py-2.5 pr-3 font-bold text-brand-dark text-sm">${dmc.id}</td>
       <td class="py-2.5 pr-3 text-sm text-brand-darker">${dmc.name}</td>
@@ -1033,10 +1066,8 @@ function renderLegend() {
   });
 
   // Attach click handlers to legend swatches
-  body.querySelectorAll('[data-palette-pos]').forEach(el => {
-    el.addEventListener('click', () => {
-      openColorPicker(parseInt(el.dataset.palettePos));
-    });
+  body.querySelectorAll('[data-dmc-idx]').forEach(el => {
+    el.addEventListener('click', () => openColorReplaceModal(parseInt(el.dataset.dmcIdx)));
   });
 
   document.getElementById('legendColorCount').textContent = `${sorted.length} DMC color${sorted.length !== 1 ? 's' : ''}`;
@@ -1055,13 +1086,13 @@ function renderSummary() {
 
   const swatchEl = document.getElementById('colorSwatches');
   swatchEl.innerHTML = '';
-  palette.forEach((dmc, pos) => {
+  paletteIndices.forEach((dmcIdx, pos) => {
+    const dmc = palette[pos];
     const s = document.createElement('div');
-    s.className = 'w-5 h-5 rounded-full border border-white shadow-sm cursor-pointer hover:ring-2 hover:ring-brand-dark transition-all';
+    s.className = 'w-5 h-5 rounded-full border border-white shadow-sm cursor-pointer hover:scale-125 transition-transform';
     s.style.backgroundColor = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
-    s.title = `DMC ${dmc.id}: ${dmc.name} — click to change`;
-    s.dataset.palettePos = pos;
-    s.addEventListener('click', () => openColorPicker(pos));
+    s.title = `DMC ${dmc.id}: ${dmc.name} — click to replace`;
+    s.addEventListener('click', () => openColorReplaceModal(dmcIdx));
     swatchEl.appendChild(s);
   });
 }
@@ -1281,6 +1312,97 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Color Replace Modal
+// ─────────────────────────────────────────────────────────────────────────────
+let colorReplaceTarget = null; // oldDmcIdx
+
+function openColorReplaceModal(dmcIdx) {
+  colorReplaceTarget = dmcIdx;
+  const dmc = DMC_WITH_LAB[dmcIdx];
+  document.getElementById('crCurrentSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+  document.getElementById('crCurrentId').textContent = `DMC ${dmc.id}`;
+  document.getElementById('crCurrentName').textContent = dmc.name;
+  document.getElementById('crSearch').value = '';
+  renderColorReplaceList('');
+  document.getElementById('colorReplaceModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('crSearch').focus(), 50);
+}
+
+function closeColorReplaceModal() {
+  document.getElementById('colorReplaceModal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderColorReplaceList(query) {
+  const list = document.getElementById('crList');
+  list.innerHTML = '';
+  const q = query.toLowerCase().trim();
+  const filtered = q
+    ? DMC_WITH_LAB.filter(d => d.id.toLowerCase().includes(q) || d.name.toLowerCase().includes(q))
+    : DMC_WITH_LAB;
+
+  const limit = Math.min(filtered.length, 150);
+  for (let fi = 0; fi < limit; fi++) {
+    const dmc = filtered[fi];
+    const dmcIdx = DMC_WITH_LAB.indexOf(dmc);
+    const item = document.createElement('button');
+    item.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left';
+    if (dmcIdx === colorReplaceTarget) item.classList.add('bg-brand-light');
+    item.innerHTML = `
+      <div class="w-6 h-6 rounded-md border border-gray-200 flex-shrink-0" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})"></div>
+      <span class="text-sm font-semibold text-brand-dark w-14 flex-shrink-0">${dmc.id}</span>
+      <span class="text-sm text-brand-darker truncate">${dmc.name}</span>
+    `;
+    item.addEventListener('click', () => {
+      replacePatternColor(colorReplaceTarget, dmcIdx);
+      closeColorReplaceModal();
+    });
+    list.appendChild(item);
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<p class="text-sm text-brand-gray text-center py-8">No colors found</p>';
+  }
+}
+
+function replacePatternColor(oldDmcIdx, newDmcIdx) {
+  if (!patternData || oldDmcIdx === newDmcIdx) return;
+  const { grid, palette, paletteIndices, stitchCounts, W, H } = patternData;
+
+  const oldCount = stitchCounts.get(oldDmcIdx) || 0;
+  // Replace all occurrences in grid
+  for (let i = 0; i < W * H; i++) {
+    if (grid[i] === oldDmcIdx) grid[i] = newDmcIdx;
+  }
+  stitchCounts.delete(oldDmcIdx);
+
+  const oldPos = paletteIndices.indexOf(oldDmcIdx);
+  if (paletteIndices.includes(newDmcIdx)) {
+    // Merge into existing palette entry
+    stitchCounts.set(newDmcIdx, (stitchCounts.get(newDmcIdx) || 0) + oldCount);
+    palette.splice(oldPos, 1);
+    paletteIndices.splice(oldPos, 1);
+  } else {
+    // Swap palette entry with new color
+    stitchCounts.set(newDmcIdx, oldCount);
+    palette[oldPos] = DMC_WITH_LAB[newDmcIdx];
+    paletteIndices[oldPos] = newDmcIdx;
+  }
+
+  renderCanvas();
+  renderLegend();
+  renderSummary();
+  showToast('Color replaced!');
+}
+
+document.getElementById('crSearch').addEventListener('input', e => renderColorReplaceList(e.target.value));
+document.getElementById('crCancelBtn').addEventListener('click', closeColorReplaceModal);
+document.getElementById('colorReplaceModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeColorReplaceModal();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Toast Notification
 // ─────────────────────────────────────────────────────────────────────────────
 let toastTimer = null;
@@ -1300,58 +1422,6 @@ document.getElementById('mobileMenuBtn').addEventListener('click', function() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Color Picker / Color Change
 // ─────────────────────────────────────────────────────────────────────────────
-function rgbToHex(r, g, b) {
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-}
-
-function hexToRgb(hex) {
-  return {
-    r: parseInt(hex.slice(1, 3), 16),
-    g: parseInt(hex.slice(3, 5), 16),
-    b: parseInt(hex.slice(5, 7), 16)
-  };
-}
-
-function openColorPicker(palettePos) {
-  if (!patternData) return;
-  const dmc = patternData.palette[palettePos];
-
-  const input = document.getElementById('colorReplacer');
-  input.value = rgbToHex(dmc.r, dmc.g, dmc.b);
-
-  const applyChange = () => {
-    input.removeEventListener('change', applyChange);
-    const { r, g, b } = hexToRgb(input.value);
-    const newDmcIdx = nearestDMCIndex(r, g, b);
-    const newDmc = DMC_WITH_LAB[newDmcIdx];
-    const { grid, palette, paletteIndices, stitchCounts } = patternData;
-    const oldDmcIdx = paletteIndices[palettePos];
-    if (oldDmcIdx === newDmcIdx) return;
-
-    for (let i = 0; i < grid.length; i++) {
-      if (grid[i] === oldDmcIdx) grid[i] = newDmcIdx;
-    }
-    const oldCount = stitchCounts.get(oldDmcIdx) || 0;
-    stitchCounts.delete(oldDmcIdx);
-    const existingPos = paletteIndices.findIndex((idx, i) => idx === newDmcIdx && i !== palettePos);
-    if (existingPos >= 0) {
-      stitchCounts.set(newDmcIdx, (stitchCounts.get(newDmcIdx) || 0) + oldCount);
-      palette.splice(palettePos, 1);
-      paletteIndices.splice(palettePos, 1);
-    } else {
-      stitchCounts.set(newDmcIdx, oldCount);
-      palette[palettePos] = { ...newDmc };
-      paletteIndices[palettePos] = newDmcIdx;
-    }
-    renderCanvas();
-    renderLegend();
-    renderSummary();
-    showToast(`Changed to DMC ${newDmc.id} · ${newDmc.name}`);
-  };
-
-  input.addEventListener('change', applyChange);
-  input.click();
-}
 </script>
 </body>
 </html>

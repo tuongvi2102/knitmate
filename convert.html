@@ -1322,6 +1322,10 @@ function openColorReplaceModal(dmcIdx) {
   document.getElementById('crCurrentSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
   document.getElementById('crCurrentId').textContent = `DMC ${dmc.id}`;
   document.getElementById('crCurrentName').textContent = dmc.name;
+  // Reset picker
+  document.getElementById('crHexInput').value = '';
+  document.getElementById('crPickerPreview').style.background = '#cccccc';
+  document.getElementById('crNearestInfo').classList.add('hidden');
   document.getElementById('crSearch').value = '';
   renderColorReplaceList('');
   document.getElementById('colorReplaceModal').classList.remove('hidden');
@@ -1334,21 +1338,23 @@ function closeColorReplaceModal() {
   document.body.style.overflow = '';
 }
 
-function renderColorReplaceList(query) {
+function renderColorReplaceList(query, highlightIdx = null) {
   const list = document.getElementById('crList');
   list.innerHTML = '';
   const q = query.toLowerCase().trim();
+  const indexed = DMC_WITH_LAB.map((dmc, dmcIdx) => ({ dmc, dmcIdx }));
   const filtered = q
-    ? DMC_WITH_LAB.filter(d => d.id.toLowerCase().includes(q) || d.name.toLowerCase().includes(q))
-    : DMC_WITH_LAB;
+    ? indexed.filter(({ dmc }) => dmc.id.toLowerCase().includes(q) || dmc.name.toLowerCase().includes(q))
+    : indexed;
 
   const limit = Math.min(filtered.length, 150);
   for (let fi = 0; fi < limit; fi++) {
-    const dmc = filtered[fi];
-    const dmcIdx = DMC_WITH_LAB.indexOf(dmc);
+    const { dmc, dmcIdx } = filtered[fi];
     const item = document.createElement('button');
     item.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left';
+    item.dataset.dmcIdx = dmcIdx;
     if (dmcIdx === colorReplaceTarget) item.classList.add('bg-brand-light');
+    if (highlightIdx !== null && dmcIdx === highlightIdx) item.classList.add('ring-2', 'ring-brand-dark');
     item.innerHTML = `
       <div class="w-6 h-6 rounded-md border border-gray-200 flex-shrink-0" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})"></div>
       <span class="text-sm font-semibold text-brand-dark w-14 flex-shrink-0">${dmc.id}</span>
@@ -1363,6 +1369,12 @@ function renderColorReplaceList(query) {
 
   if (filtered.length === 0) {
     list.innerHTML = '<p class="text-sm text-brand-gray text-center py-8">No colors found</p>';
+  }
+
+  // Scroll to highlighted item
+  if (highlightIdx !== null) {
+    const target = list.querySelector(`[data-dmc-idx="${highlightIdx}"]`);
+    if (target) target.scrollIntoView({ block: 'center' });
   }
 }
 
@@ -1397,6 +1409,43 @@ function replacePatternColor(oldDmcIdx, newDmcIdx) {
 }
 
 document.getElementById('crSearch').addEventListener('input', e => renderColorReplaceList(e.target.value));
+
+// Color picker & hex input
+document.getElementById('crPickerPreview').addEventListener('click', () => {
+  document.getElementById('crColorNative').click();
+});
+document.getElementById('crColorNative').addEventListener('input', e => {
+  const hex = e.target.value;
+  document.getElementById('crPickerPreview').style.background = hex;
+  document.getElementById('crHexInput').value = hex.toUpperCase();
+  applyPickedColor(hex);
+});
+document.getElementById('crHexInput').addEventListener('input', e => {
+  let hex = e.target.value.trim();
+  if (!hex.startsWith('#')) hex = '#' + hex;
+  document.getElementById('crHexInput').value = hex.toUpperCase();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    document.getElementById('crPickerPreview').style.background = hex;
+    document.getElementById('crColorNative').value = hex.toLowerCase();
+    applyPickedColor(hex);
+  }
+});
+
+function applyPickedColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/i.test(hex)) return;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const idx = nearestDMCIndex(r, g, b);
+  const dmc = DMC_WITH_LAB[idx];
+  // Show nearest DMC badge
+  document.getElementById('crNearestInfo').classList.remove('hidden');
+  document.getElementById('crNearestSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+  document.getElementById('crNearestLabel').textContent = `DMC ${dmc.id} · ${dmc.name}`;
+  // Clear text search, re-render list with this item highlighted and scrolled into view
+  document.getElementById('crSearch').value = '';
+  renderColorReplaceList('', idx);
+}
 document.getElementById('crCancelBtn').addEventListener('click', closeColorReplaceModal);
 document.getElementById('colorReplaceModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeColorReplaceModal();

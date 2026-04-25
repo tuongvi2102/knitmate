@@ -32,7 +32,7 @@
   <style>
     body { font-family: 'Inter', sans-serif; background-color: #FAF7F4; }
     h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', sans-serif; }
-    #designCanvas { image-rendering: pixelated; cursor: crosshair; display: block; }
+    #designCanvas { image-rendering: pixelated; display: block; }
     #canvasViewport { overflow: hidden; position: relative; background: #e5e7eb; }
     .tool-btn { transition: all 0.15s; }
     .tool-btn.active { background: #C49270; color: #EBDBD4; }
@@ -632,7 +632,7 @@ canvas.addEventListener('mousemove', e => {
   const cell = getCellAt(e);
   if (cell) {
     document.getElementById('statusCursor').textContent = `${cell.x+1}, ${cell.y+1}`;
-    canvas.style.cursor = currentTool === 'eyedropper' ? 'crosshair' : currentTool === 'eraser' ? 'cell' : 'crosshair';
+    canvas.style.cursor = getToolCursor(currentTool);
   } else {
     document.getElementById('statusCursor').textContent = '—';
   }
@@ -740,11 +740,20 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
   btn.addEventListener('click', () => setTool(btn.dataset.tool));
 });
 
+function getToolCursor(tool) {
+  if (tool === 'pencil') {
+    return "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z' fill='%23000'/%3E%3C/svg%3E\") 0 24, crosshair";
+  }
+  if (tool === 'eraser') return 'cell';
+  return 'crosshair';
+}
+
 function setTool(tool) {
   currentTool = tool;
   document.querySelectorAll('.tool-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tool === tool);
   });
+  canvas.style.cursor = getToolCursor(tool);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -995,6 +1004,7 @@ function showToast(msg) {
 initGrid(40, 40, 'square');
 buildDMCPalette();
 updateColorPreview();
+canvas.style.cursor = getToolCursor(currentTool);
 // Select first DMC swatch
 document.querySelectorAll('.dmc-swatch').forEach(s => {
   if (s.title.includes('Black')) s.classList.add('selected');

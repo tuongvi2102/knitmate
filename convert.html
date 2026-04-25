@@ -48,7 +48,7 @@
       background-image: radial-gradient(#EBDBD4 1px, transparent 1px);
       background-size: 20px 20px;
     }
-    #canvasWrapper { overflow: auto; cursor: crosshair; }
+    #canvasWrapper { overflow: auto; cursor: pointer; }
     #patternCanvas { display: block; image-rendering: pixelated; }
     #tooltip {
       position: fixed; pointer-events: none; z-index: 100;
@@ -118,6 +118,34 @@
   </div>
 </div>
 
+<!-- Paint Color Picker Modal -->
+<div id="paintColorModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.5)">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col" style="max-height:80vh">
+    <div class="p-5 border-b border-gray-100">
+      <h3 class="text-lg font-bold text-brand-dark mb-3">Pick Paint Color</h3>
+      <!-- Custom color picker -->
+      <div class="mb-3">
+        <p class="text-xs text-brand-gray mb-2">Pick any color</p>
+        <div class="flex items-center gap-2">
+          <div id="pcPickerPreview" class="w-9 h-9 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-brand-dark transition-colors" title="Click to open color picker" style="background:#cccccc"></div>
+          <input type="color" id="pcColorNative" class="sr-only" tabindex="-1">
+          <input id="pcHexInput" type="text" placeholder="#RRGGBB" maxlength="7" spellcheck="false"
+            class="w-28 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand-dark font-mono uppercase">
+          <div id="pcNearestInfo" class="hidden flex items-center gap-1.5 flex-1 min-w-0">
+            <div id="pcNearestSwatch" class="w-5 h-5 rounded border border-gray-200 flex-shrink-0"></div>
+            <span id="pcNearestLabel" class="text-xs font-semibold text-brand-dark truncate"></span>
+          </div>
+        </div>
+      </div>
+      <input id="pcSearch" type="text" placeholder="Search DMC number or name…" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand-dark">
+    </div>
+    <div id="pcList" class="overflow-y-auto flex-1 p-2"></div>
+    <div class="p-4 border-t border-gray-100">
+      <button id="pcCancelBtn" class="w-full py-2 text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Navigation -->
 <nav class="w-full bg-white/90 backdrop-blur-md fixed top-0 z-50 border-b border-bluegray">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -157,12 +185,16 @@
 </nav>
 
 <!-- Main Workspace -->
-<main class="pt-24 pb-12 w-full min-h-screen flex flex-col md:flex-row gap-6 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+<main class="pt-24 pb-4 md:pb-0 w-full min-h-screen md:h-screen md:overflow-hidden flex flex-col md:flex-row gap-6 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
 
   <!-- Sidebar Controls -->
-  <aside class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-white rounded-2xl shadow-card p-6 border border-gray-100 h-fit md:sticky top-28">
+  <aside class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-white rounded-2xl shadow-card p-6 border border-gray-100 h-fit md:h-full md:overflow-y-auto">
     <h2 class="text-xl font-bold text-brand-dark mb-6">Pattern Settings</h2>
     <form class="space-y-6" id="patternForm">
+
+      <!-- Hidden grid dimension inputs -->
+      <input type="hidden" id="gridWidth" value="80">
+      <input type="hidden" id="gridHeight" value="68">
 
       <!-- Image Upload -->
       <div class="space-y-3">
@@ -179,72 +211,84 @@
         <div id="uploadPreview" class="hidden">
           <img id="uploadThumb" class="w-full h-32 object-contain rounded-lg border border-gray-200 bg-gray-50">
         </div>
-      </div>
-
-      <!-- Dimensions with aspect ratio lock -->
-      <div class="space-y-3">
-        <label class="block text-sm font-semibold text-brand-darker">Grid Dimensions (Stitches)</label>
-        <div class="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
-          <div>
-            <label class="text-xs text-brand-gray mb-1 block">Width</label>
-            <input type="number" id="gridWidth" value="80" min="10" max="300"
-              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
-          </div>
-          <div class="flex flex-col items-center pb-0.5">
-            <button type="button" id="lockAspectBtn" title="Lock aspect ratio"
-              class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-brand-gray hover:border-brand-dark hover:text-brand-dark transition-all">
-              <i id="lockIcon" class="fa-solid fa-link text-xs"></i>
-            </button>
-          </div>
-          <div>
-            <label class="text-xs text-brand-gray mb-1 block">Height</label>
-            <input type="number" id="gridHeight" value="68" min="10" max="300"
-              class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
-          </div>
+        <!-- Import working file -->
+        <div class="flex items-center gap-2 mt-1">
+          <div class="flex-1 h-px bg-gray-200"></div>
+          <span class="text-xs text-brand-gray">or</span>
+          <div class="flex-1 h-px bg-gray-200"></div>
         </div>
-        <p class="text-xs text-brand-gray" id="aspectNote">Aspect ratio: free</p>
-      </div>
-
-      <!-- Grid Ratio -->
-      <div class="space-y-3">
-        <label class="block text-sm font-semibold text-brand-darker">Stitch Ratio</label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="relative cursor-pointer">
-            <input type="radio" name="grid_type" value="square" checked class="peer sr-only">
-            <div class="p-3 rounded-lg border border-gray-200 peer-checked:border-brand-dark peer-checked:bg-brand-light/30 text-center transition-all">
-              <i class="fa-regular fa-square mb-1 text-brand-dark block"></i>
-              <div class="text-xs font-medium text-brand-dark">Square (1:1)</div>
-            </div>
-          </label>
-          <label class="relative cursor-pointer">
-            <input type="radio" name="grid_type" value="knit" class="peer sr-only">
-            <div class="p-3 rounded-lg border border-gray-200 peer-checked:border-brand-dark peer-checked:bg-brand-light/30 text-center transition-all">
-              <i class="fa-regular fa-rectangle-list mb-1 text-brand-dark block"></i>
-              <div class="text-xs font-medium text-brand-dark">Knit (4:5)</div>
-            </div>
-          </label>
-        </div>
+        <button type="button" id="importWorkingFileBtn" class="w-full flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-xs font-semibold text-brand-dark hover:border-brand-dark transition-all bg-gray-50 hover:bg-brand-light/20">
+          <i class="fa-solid fa-folder-open"></i> Import saved pattern (.knitmate)
+        </button>
+        <input type="file" id="workingFileInput" accept=".knitmate" class="hidden">
       </div>
 
       <!-- Gauge -->
-      <div class="space-y-3">
+      <div class="space-y-3 pt-4 border-t border-gray-100">
         <label class="block text-sm font-semibold text-brand-darker">Gauge (per 10cm / 4")</label>
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="text-xs text-brand-gray mb-1 block">Stitches</label>
-            <input type="number" id="gaugeStitches" value="20" min="1"
+            <input type="number" id="gaugeStitches" value="" min="1" placeholder="e.g. 20"
               class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
           </div>
           <div>
             <label class="text-xs text-brand-gray mb-1 block">Rows</label>
-            <input type="number" id="gaugeRows" value="26" min="1"
+            <input type="number" id="gaugeRows" value="" min="1" placeholder="e.g. 26"
               class="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none transition-all text-sm font-medium">
           </div>
         </div>
       </div>
 
+      <!-- Gauge Calculator (always visible, side-by-side) -->
+      <div class="space-y-3 pt-4 border-t border-gray-100">
+        <label class="block text-sm font-semibold text-brand-darker"><i class="fa-solid fa-ruler-combined mr-1.5 text-brand-gray"></i>Gauge Calculator</label>
+        <p class="text-xs text-brand-gray -mt-1">Enter either one — whichever you know.</p>
+        <div class="flex items-start gap-2">
+          <!-- cm → Stitches (left) -->
+          <div class="flex-1 space-y-2 p-3 rounded-xl border border-gray-200 bg-gray-50">
+            <div class="text-xs font-semibold text-brand-dark text-center pb-1 border-b border-gray-200">cm → Stitches</div>
+            <div>
+              <label class="text-xs text-brand-gray mb-1 block">Width (cm)</label>
+              <input type="number" id="gcWidthCm" min="0" placeholder="e.g. 45"
+                class="w-full px-2 py-1.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none text-xs font-medium">
+            </div>
+            <div id="gcResultCmToSt" class="hidden bg-brand-light/40 rounded-lg p-2 text-xs text-brand-dark space-y-0.5">
+              <div id="gcWidthStResult"></div>
+            </div>
+          </div>
+          <!-- OR divider -->
+          <div class="flex flex-col items-center justify-center gap-1 pt-6 flex-shrink-0">
+            <div class="w-px flex-1 bg-gray-200"></div>
+            <span class="text-xs font-semibold text-brand-gray bg-white border border-gray-200 rounded-full px-1.5 py-0.5">or</span>
+            <div class="w-px flex-1 bg-gray-200"></div>
+          </div>
+          <!-- Stitches → cm (right) -->
+          <div class="flex-1 space-y-2 p-3 rounded-xl border border-gray-200 bg-gray-50">
+            <div class="text-xs font-semibold text-brand-dark text-center pb-1 border-b border-gray-200">Stitches → cm</div>
+            <div>
+              <label class="text-xs text-brand-gray mb-1 block">Width (sts)</label>
+              <input type="number" id="gcWidthSt" min="0" placeholder="e.g. 100"
+                class="w-full px-2 py-1.5 rounded-lg border border-gray-200 focus:border-brand-dark focus:ring-1 focus:ring-brand-dark outline-none text-xs font-medium">
+            </div>
+            <div id="gcResultStToCm" class="hidden bg-brand-light/40 rounded-lg p-2 text-xs text-brand-dark space-y-0.5">
+              <div id="gcWidthCmResult"></div>
+            </div>
+          </div>
+        </div> <!-- end flex panels -->
+        <!-- Auto-calculated height display (shared, from image aspect ratio) -->
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+          <span class="text-brand-gray font-medium">Height (from image)</span>
+          <span id="gcHeightRowsDisplay" class="font-bold text-brand-dark">— upload image first</span>
+        </div>
+        <div id="gcGridDimDisplay" class="text-xs font-semibold text-brand-dark bg-brand-light/40 rounded-lg px-3 py-1.5 text-center hidden"></div>
+      </div>
+
+      <!-- Grid Ratio (hidden, default square) -->
+      <input type="radio" name="grid_type" value="square" checked class="hidden">
+
       <!-- Max Colors -->
-      <div class="space-y-3">
+      <div class="space-y-3 pt-4 border-t border-gray-100">
         <label class="block text-sm font-semibold text-brand-darker">
           Max DMC Colors: <span id="maxColorsVal" class="text-brand-dark">15</span>
         </label>
@@ -264,7 +308,7 @@
   </aside>
 
   <!-- Right Column -->
-  <div class="flex-1 flex flex-col gap-6">
+  <div class="flex-1 flex flex-col gap-6 md:h-full md:overflow-hidden md:min-h-0">
 
     <!-- Top Controls -->
     <div class="bg-white rounded-2xl shadow-card p-4 border border-gray-100 flex flex-wrap justify-between items-center gap-4">
@@ -289,6 +333,22 @@
           class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all disabled:opacity-30 disabled:cursor-not-allowed">
           <i class="fa-solid fa-rotate-right text-xs"></i>
         </button>
+        <!-- Select tool -->
+        <button id="selectToolBtn" title="Point select — click pixels to add/remove from selection"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
+          <i class="fa-solid fa-arrow-pointer text-xs"></i> Select
+        </button>
+        <div class="w-px h-6 bg-gray-200"></div>
+        <!-- Paint tool -->
+        <button id="paintToolBtn" title="Paint pixels — select a color then click/drag on the grid"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-brand-dark hover:border-brand-dark transition-all">
+          <i class="fa-solid fa-pencil text-xs"></i> Paint
+        </button>
+        <!-- Active paint color display -->
+        <div id="paintColorDisplay" class="hidden items-center gap-1.5 pl-1 pr-3 py-1.5 rounded-lg border border-brand-dark bg-brand-light cursor-pointer hover:opacity-80 transition-opacity" title="Active paint color — click swatch below to change">
+          <div id="paintColorSwatch" class="w-4 h-4 rounded border border-white/60 flex-shrink-0"></div>
+          <span id="paintColorLabel" class="text-xs font-semibold text-brand-dark truncate max-w-[72px]">—</span>
+        </div>
       </div>
       <div class="flex items-center gap-3">
         <button id="zoomOutBtn" class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all">
@@ -305,23 +365,49 @@
         <button id="exportPdfBtn" class="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
           <i class="fa-solid fa-file-pdf"></i> PDF
         </button>
+        <button id="saveWorkingFileBtn" class="bg-brand-dark text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-brand-darker transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-floppy-disk"></i> Save
+        </button>
+      </div>
+    </div>
+
+    <!-- Summary bar -->
+    <div id="summaryPanel" class="hidden bg-white rounded-2xl shadow-card border border-gray-100 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs">
+      <div class="flex items-center gap-1.5">
+        <span class="text-brand-gray">Size</span>
+        <span id="summarySize" class="font-semibold text-brand-darker">—</span>
+      </div>
+      <div class="w-px h-4 bg-gray-200"></div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-brand-gray">DMC Colors</span>
+        <span id="summaryColors" class="font-semibold text-brand-darker">—</span>
+      </div>
+      <div class="w-px h-4 bg-gray-200"></div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-brand-gray">Est. Size</span>
+        <span id="summaryEst" class="font-semibold text-brand-darker">—</span>
+      </div>
+      <div class="w-px h-4 bg-gray-200"></div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-brand-gray">Colors</span>
+        <div id="colorSwatches" class="flex flex-wrap gap-1"></div>
       </div>
     </div>
 
     <!-- Canvas Area -->
-    <div class="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden relative flex items-center justify-center pattern-bg min-h-[500px]" id="canvasOuter">
+    <div class="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden relative flex items-center justify-center pattern-bg flex-1 min-h-[300px] md:min-h-0" id="canvasOuter">
 
       <!-- Empty state -->
-      <div id="emptyState" class="text-center p-8">
+      <div id="emptyState" class="text-center p-8 w-full flex flex-col items-center justify-center min-h-[400px]">
         <div class="w-20 h-20 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4">
           <i class="fa-solid fa-image text-brand-dark text-3xl"></i>
         </div>
         <h3 class="text-lg font-bold text-brand-dark mb-2">No pattern yet</h3>
-        <p class="text-brand-gray text-sm">Upload an image and click <strong>Generate Pattern</strong> to get started.</p>
+        <p class="text-brand-gray text-sm">Upload an image to automatically generate your pattern.</p>
       </div>
 
       <!-- Loading state -->
-      <div id="loadingState" class="hidden text-center p-8">
+      <div id="loadingState" class="hidden text-center p-8 w-full flex flex-col items-center justify-center min-h-[400px]">
         <div class="w-20 h-20 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4 animate-pulse">
           <i class="fa-solid fa-wand-magic-sparkles text-brand-dark text-3xl"></i>
         </div>
@@ -330,10 +416,11 @@
       </div>
 
       <!-- Pattern view -->
-      <div id="patternContainer" class="hidden w-full h-full p-6 flex items-start justify-center">
+      <div id="patternContainer" class="hidden w-full h-full p-6 flex items-center justify-center">
         <div id="canvasWrapper" class="relative max-w-full">
-          <div id="patternGrid" style="transform-origin: top left;">
+          <div id="patternGrid" style="transform-origin: top left; position: relative;">
             <canvas id="patternCanvas"></canvas>
+            <canvas id="selectionCanvas" style="position:absolute;top:0;left:0;pointer-events:none;display:none"></canvas>
           </div>
         </div>
       </div>
@@ -343,53 +430,20 @@
         <img id="originalImage" src="" alt="Original" class="max-h-[550px] rounded-xl shadow-md object-contain">
       </div>
 
-      <!-- Summary panel -->
-      <div id="summaryPanel" class="hidden absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-4 w-56">
-        <h4 class="text-sm font-bold text-brand-dark mb-3">Pattern Summary</h4>
-        <div class="space-y-2 text-xs">
-          <div class="flex justify-between border-b border-gray-100 pb-1">
-            <span class="text-brand-gray">Size</span>
-            <span id="summarySize" class="font-semibold text-brand-darker">—</span>
-          </div>
-          <div class="flex justify-between border-b border-gray-100 pb-1">
-            <span class="text-brand-gray">DMC Colors</span>
-            <span id="summaryColors" class="font-semibold text-brand-darker">—</span>
-          </div>
-          <div class="flex justify-between pb-1">
-            <span class="text-brand-gray">Est. Size</span>
-            <span id="summaryEst" class="font-semibold text-brand-darker">—</span>
-          </div>
-        </div>
-        <div class="mt-3 pt-3 border-t border-gray-100">
-          <p class="text-xs text-brand-gray mb-2">Colors used</p>
-          <div id="colorSwatches" class="flex flex-wrap gap-1"></div>
-        </div>
+      <!-- Selection action bar -->
+      <div id="selectionBar" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 px-4 py-2.5 flex items-center gap-3 z-20 whitespace-nowrap">
+        <i class="fa-solid fa-arrow-pointer text-brand-dark text-xs"></i>
+        <span id="selectionCount" class="text-xs font-semibold text-brand-dark"></span>
+        <div class="w-px h-4 bg-gray-200"></div>
+        <button id="selectionReplaceBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-dark text-white hover:opacity-90 transition-opacity">
+          Replace Color
+        </button>
+        <button id="selectionClearBtn" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-brand-gray hover:border-brand-dark hover:text-brand-dark transition-all">
+          Clear
+        </button>
       </div>
     </div>
 
-    <!-- Color Legend -->
-    <div id="legendContainer" class="hidden bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-bold text-brand-dark">DMC Thread Legend</h3>
-        <span id="legendColorCount" class="text-xs text-brand-gray font-medium bg-gray-100 px-2.5 py-1 rounded-full"></span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs text-brand-gray border-b border-gray-100">
-              <th class="pb-3 font-semibold w-8">#</th>
-              <th class="pb-3 font-semibold">Swatch</th>
-              <th class="pb-3 font-semibold">DMC No.</th>
-              <th class="pb-3 font-semibold">Color Name</th>
-              <th class="pb-3 font-semibold text-right">Stitches</th>
-              <th class="pb-3 font-semibold text-right">Skeins</th>
-            </tr>
-          </thead>
-          <tbody id="legendBody"></tbody>
-        </table>
-      </div>
-      <p class="text-xs text-brand-gray mt-4">* Skein estimate based on ~150 stitches per skein at 14-count Aida with 2 strands.</p>
-    </div>
 
   </div><!-- /right column -->
 </main>
@@ -828,6 +882,11 @@ let originalAspect = null; // image W/H ratio
 const undoStack = [];
 const redoStack = [];
 const MAX_UNDO = 40;
+const CROP_EDGE_THRESHOLD = 10; // canvas pixels (unscaled) for edge hit area
+let cropDragging = false;
+let cropEdge = null; // 'left' | 'right' | 'top' | 'bottom'
+let cropPreviewCell = -1; // grid col/row at current drag position
+let suppressNextClick = false; // prevent color-replace modal after a crop drag
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload
@@ -859,7 +918,12 @@ function loadFile(file) {
       originalAspect = uploadedImage.naturalWidth / uploadedImage.naturalHeight;
       // Auto-set height from width if locked
       if (aspectLocked) syncHeight();
-      showToast('Image loaded! Click Generate Pattern.');
+      // Auto-generate pattern after image loads
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('patternContainer').classList.add('hidden');
+      document.getElementById('originalContainer').classList.add('hidden');
+      document.getElementById('loadingState').classList.remove('hidden');
+      setTimeout(generatePattern, 50);
     };
     uploadedImage.src = e.target.result;
   };
@@ -867,44 +931,44 @@ function loadFile(file) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Aspect Ratio Lock
+// Grid dimension elements (values set by Gauge Calculator)
 // ─────────────────────────────────────────────────────────────────────────────
-const lockBtn = document.getElementById('lockAspectBtn');
-const lockIcon = document.getElementById('lockIcon');
-const aspectNote = document.getElementById('aspectNote');
 const gridWidthEl = document.getElementById('gridWidth');
 const gridHeightEl = document.getElementById('gridHeight');
-
-lockBtn.addEventListener('click', () => {
-  aspectLocked = !aspectLocked;
-  lockBtn.classList.toggle('bg-brand-light', aspectLocked);
-  lockBtn.classList.toggle('border-brand-dark', aspectLocked);
-  lockBtn.classList.toggle('text-brand-dark', aspectLocked);
-  lockIcon.className = aspectLocked ? 'fa-solid fa-lock text-xs' : 'fa-solid fa-link text-xs';
-  if (aspectLocked && originalAspect) {
-    aspectRatio = originalAspect;
-    syncHeight();
-    aspectNote.textContent = `Aspect ratio: ${originalAspect.toFixed(2)}:1 (locked)`;
-  } else {
-    aspectNote.textContent = 'Aspect ratio: free';
-  }
-});
-
-gridWidthEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncHeight(); });
-gridHeightEl.addEventListener('input', () => { if (aspectLocked && originalAspect) syncWidth(); });
-
-// Apply default locked state visuals
-lockBtn.classList.add('bg-brand-light', 'border-brand-dark', 'text-brand-dark');
-lockIcon.className = 'fa-solid fa-lock text-xs';
 
 function syncHeight() {
   const w = parseInt(gridWidthEl.value) || 80;
   gridHeightEl.value = Math.max(10, Math.round(w / originalAspect));
+  updateHeightDisplays();
 }
 function syncWidth() {
   const h = parseInt(gridHeightEl.value) || 68;
   gridWidthEl.value = Math.max(10, Math.round(h * originalAspect));
 }
+let _regenTimer = null;
+function scheduleRegen() {
+  if (!uploadedImage) return;
+  clearTimeout(_regenTimer);
+  _regenTimer = setTimeout(() => {
+    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('patternContainer').classList.add('hidden');
+    document.getElementById('originalContainer').classList.add('hidden');
+    document.getElementById('loadingState').classList.remove('hidden');
+    setTimeout(generatePattern, 50);
+  }, 600);
+}
+
+function updateHeightDisplays() {
+  const el = document.getElementById('gcHeightRowsDisplay');
+  if (!el) return;
+  if (!originalAspect) { el.textContent = '— upload image first'; return; }
+  const h = parseInt(gridHeightEl.value) || 0;
+  if (!h) { el.textContent = '—'; return; }
+  const ro = parseFloat(document.getElementById('gaugeRows').value) || 0;
+  const hCm = ro ? (Math.round(h / ro * 10 * 10) / 10) : null;
+  el.textContent = hCm ? `${h} rows · ${hCm} cm` : `${h} rows`;
+}
+
 
 // Max colors slider label
 const maxColorsEl = document.getElementById('maxColors');
@@ -921,7 +985,6 @@ document.getElementById('generateBtn').addEventListener('click', () => {
   document.getElementById('patternContainer').classList.add('hidden');
   document.getElementById('originalContainer').classList.add('hidden');
   document.getElementById('loadingState').classList.remove('hidden');
-  document.getElementById('legendContainer').classList.add('hidden');
 
   setTimeout(generatePattern, 50);
 });
@@ -931,8 +994,8 @@ function generatePattern() {
   const H = Math.max(10, Math.min(300, parseInt(gridHeightEl.value) || 68));
   const maxColors = parseInt(maxColorsEl.value) || 15;
   const stitchRatio = document.querySelector('input[name="grid_type"]:checked').value;
-  const cellW = stitchRatio === 'knit' ? 10 : 10;
-  const cellH = stitchRatio === 'knit' ? 12 : 10; // knit cells are taller
+  const outer = document.getElementById('canvasOuter');
+  const { cellW, cellH } = computeCellSize(W, H, stitchRatio, outer.clientWidth - 48, outer.clientHeight - 48);
 
   // Draw image to offscreen canvas at grid resolution
   const off = document.createElement('canvas');
@@ -992,16 +1055,13 @@ function generatePattern() {
 
   // Render
   renderCanvas();
-  renderLegend();
   renderSummary();
 
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('patternContainer').classList.remove('hidden');
-  document.getElementById('legendContainer').classList.remove('hidden');
   document.getElementById('summaryPanel').classList.remove('hidden');
   setView('pattern');
-  currentZoom = 100;
-  updateZoom();
+  requestAnimationFrame(() => requestAnimationFrame(fitToCanvas));
 }
 
 function drawKnitCell(ctx, cx, cy, w, h, r, g, b) {
@@ -1009,12 +1069,16 @@ function drawKnitCell(ctx, cx, cy, w, h, r, g, b) {
   ctx.fillRect(cx, cy, w, h);
 }
 
+const LABEL_PAD_X = 24; // px below grid for column numbers
+const LABEL_PAD_Y = 32; // px right of grid for row numbers
+const LABEL_PAD = LABEL_PAD_X; // alias used in computeCellSize (bottom strip)
+
 function renderCanvas() {
   if (!patternData) return;
   const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
   const canvas = document.getElementById('patternCanvas');
-  canvas.width = W * cellW;
-  canvas.height = H * cellH;
+  canvas.width = W * cellW + LABEL_PAD_Y;
+  canvas.height = H * cellH + LABEL_PAD_X;
   const ctx = canvas.getContext('2d');
 
   // Draw cells
@@ -1029,6 +1093,57 @@ function renderCanvas() {
 
   // Draw grid lines
   if (showGrid) drawGridLines(ctx, W, H, cellW, cellH);
+
+  // Draw row/column numbers
+  drawAxisLabels(ctx, W, H, cellW, cellH);
+
+  // Draw selection overlay
+  if (selectedPixels.size > 0) {
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.3)';
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.9)';
+    ctx.lineWidth = 1.5;
+    for (const key of selectedPixels) {
+      const [sx, sy] = key.split(',').map(Number);
+      ctx.fillRect(sx * cellW, sy * cellH, cellW, cellH);
+      ctx.strokeRect(sx * cellW + 0.75, sy * cellH + 0.75, cellW - 1.5, cellH - 1.5);
+    }
+  }
+}
+
+function drawAxisLabels(ctx, W, H, cellW, cellH) {
+  // Separator lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, H * cellH); ctx.lineTo(W * cellW, H * cellH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(W * cellW, 0); ctx.lineTo(W * cellW, H * cellH);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(70, 50, 30, 0.72)';
+  const fontSize = Math.min(cellH - 1, cellW - 1, 9, LABEL_PAD_X - 4);
+  ctx.font = `bold ${Math.max(5, fontSize)}px sans-serif`;
+
+  // Label every 10 columns along the bottom
+  const colStep = 10;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let c = colStep; c <= W; c += colStep) {
+    const px = (c - 1) * cellW + cellW / 2;
+    const py = H * cellH + LABEL_PAD_X / 2;
+    ctx.fillText(String(c), px, py);
+  }
+
+  // Label every 10 rows along the right side (bottom→top)
+  const rowStep = 10;
+  ctx.textAlign = 'left';
+  for (let r = rowStep; r <= H; r += rowStep) {
+    const gridY = H - r;
+    const px = W * cellW + 3;
+    const py = gridY * cellH + cellH / 2;
+    ctx.fillText(String(r), px, py);
+  }
 }
 
 function drawGridLines(ctx, W, H, cellW, cellH) {
@@ -1053,41 +1168,6 @@ function drawGridLines(ctx, W, H, cellW, cellH) {
   }
 }
 
-function renderLegend() {
-  if (!patternData) return;
-  const { palette, paletteIndices, stitchCounts } = patternData;
-  const body = document.getElementById('legendBody');
-  body.innerHTML = '';
-
-  // Sort legend by stitch count descending
-  const sorted = paletteIndices
-    .map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0, palettePos: pos }))
-    .sort((a, b) => b.count - a.count);
-
-  sorted.forEach(({ dmc, count, palettePos }, i) => {
-    const skeins = Math.ceil(count / 150);
-    const row = document.createElement('tr');
-    row.className = 'legend-row border-b border-gray-50 transition-colors';
-    row.innerHTML = `
-      <td class="py-2.5 pr-2 text-xs text-brand-gray">${i + 1}</td>
-      <td class="py-2.5 pr-3">
-        <div class="w-7 h-7 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-brand-dark transition-all" data-dmc-idx="${paletteIndices[palettePos]}" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})" title="Click to replace color"></div>
-      </td>
-      <td class="py-2.5 pr-3 font-bold text-brand-dark text-sm">${dmc.id}</td>
-      <td class="py-2.5 pr-3 text-sm text-brand-darker">${dmc.name}</td>
-      <td class="py-2.5 pr-3 text-sm text-right font-medium">${count.toLocaleString()}</td>
-      <td class="py-2.5 text-sm text-right font-semibold text-brand-dark">${skeins}</td>
-    `;
-    body.appendChild(row);
-  });
-
-  // Attach click handlers to legend swatches
-  body.querySelectorAll('[data-dmc-idx]').forEach(el => {
-    el.addEventListener('click', () => openColorReplaceModal(parseInt(el.dataset.dmcIdx)));
-  });
-
-  document.getElementById('legendColorCount').textContent = `${sorted.length} DMC color${sorted.length !== 1 ? 's' : ''}`;
-}
 
 function renderSummary() {
   if (!patternData) return;
@@ -1105,12 +1185,23 @@ function renderSummary() {
   paletteIndices.forEach((dmcIdx, pos) => {
     const dmc = palette[pos];
     const s = document.createElement('div');
-    s.className = 'w-5 h-5 rounded-full border border-white shadow-sm cursor-pointer hover:scale-125 transition-transform';
+    s.dataset.dmcIdxSwatch = dmcIdx;
+    s.className = 'w-5 h-5 rounded-full border-2 border-white shadow-sm cursor-pointer hover:scale-125 transition-transform';
     s.style.backgroundColor = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
-    s.title = `DMC ${dmc.id}: ${dmc.name} — click to replace`;
-    s.addEventListener('click', () => openColorReplaceModal(dmcIdx));
+    s.title = `DMC ${dmc.id}: ${dmc.name}`;
+    s.addEventListener('click', () => {
+      if (paintActive) {
+        setActivePaintColor(dmcIdx);
+      } else if (selectedPixels.size > 0) {
+        saveUndoState();
+        paintSelectedPixels(dmcIdx);
+      } else {
+        openColorReplaceModal(dmcIdx);
+      }
+    });
     swatchEl.appendChild(s);
   });
+  updatePaintSwatchHighlight();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1124,8 +1215,18 @@ patternCanvas.addEventListener('mousemove', (e) => {
   const { grid, palette, paletteIndices, W, H, cellW, cellH } = patternData;
   const rect = patternCanvas.getBoundingClientRect();
   const scale = currentZoom / 100;
-  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
-  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
+  const canvasX = (e.clientX - rect.left) / scale;
+  const canvasY = (e.clientY - rect.top) / scale;
+  const x = Math.floor(canvasX / cellW);
+  const y = Math.floor(canvasY / cellH);
+  // Crop cursor detection (only when no other tool is active)
+  if (!paintActive && !selectionActive && !cropDragging) {
+    const edge = detectCropEdge(canvasX, canvasY);
+    const wrapper = document.getElementById('canvasWrapper');
+    if (edge === 'left' || edge === 'right') wrapper.style.cursor = 'col-resize';
+    else if (edge === 'top' || edge === 'bottom') wrapper.style.cursor = 'row-resize';
+    else wrapper.style.cursor = '';
+  }
   if (x < 0 || x >= W || y < 0 || y >= H) { tooltip.style.display = 'none'; return; }
 
   const dmcIdx = grid[y * W + x];
@@ -1147,7 +1248,9 @@ patternCanvas.addEventListener('mousemove', (e) => {
 patternCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
 patternCanvas.addEventListener('click', (e) => {
+  if (suppressNextClick) { suppressNextClick = false; return; }
   if (!patternData) return;
+  if (paintActive || selectionActive) return; // handled by mousedown/drag
   const { grid, W, H, cellW, cellH } = patternData;
   const rect = patternCanvas.getBoundingClientRect();
   const scale = currentZoom / 100;
@@ -1202,6 +1305,39 @@ function updateZoom() {
   grid.style.transform = `scale(${currentZoom / 100})`;
   grid.style.transformOrigin = 'top left';
 }
+
+function computeCellSize(W, H, stitchRatio, availW, availH) {
+  const knit = stitchRatio === 'knit';
+  // knit cells: cellW/cellH = 10/12
+  const cellHFromH = Math.floor((availH - LABEL_PAD_X) / H);
+  const cellHFromW = knit
+    ? Math.floor((availW - LABEL_PAD_Y) / W * 12 / 10)
+    : Math.floor((availW - LABEL_PAD_Y) / W);
+  const cellH = Math.max(2, Math.min(cellHFromH, cellHFromW));
+  const cellW = knit ? Math.max(2, Math.round(cellH * 10 / 12)) : cellH;
+  return { cellW, cellH };
+}
+
+function fitToCanvas() {
+  if (!patternData) return;
+  const outer = document.getElementById('canvasOuter');
+  const { W, H } = patternData;
+  const stitchRatio = document.querySelector('input[name="grid_type"]:checked').value;
+  const availW = outer.clientWidth - 48;
+  const availH = outer.clientHeight - 48;
+  if (availW <= 0 || availH <= 0) return;
+  const { cellW, cellH } = computeCellSize(W, H, stitchRatio, availW, availH);
+  patternData.cellW = cellW;
+  patternData.cellH = cellH;
+  currentZoom = 100;
+  updateZoom();
+  renderCanvas();
+  renderSummary();
+}
+
+window.addEventListener('resize', () => {
+  if (patternData) requestAnimationFrame(fitToCanvas);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Export PNG
@@ -1340,12 +1476,546 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Save / Load Working File (.knitmate)
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('saveWorkingFileBtn').addEventListener('click', () => {
+  if (!patternData) { showToast('Generate a pattern first.'); return; }
+  const { grid, paletteIndices, W, H, cellW, cellH } = patternData;
+  const payload = {
+    version: 1,
+    W, H, cellW, cellH,
+    paletteIndices: Array.from(paletteIndices),
+    grid: Array.from(grid),
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.download = 'knitmate-pattern.knitmate';
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast('Pattern saved!');
+});
+
+document.getElementById('importWorkingFileBtn').addEventListener('click', () => {
+  document.getElementById('workingFileInput').click();
+});
+
+document.getElementById('workingFileInput').addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (!payload.version || !payload.grid || !payload.paletteIndices) throw new Error('Invalid file');
+
+      const { W, H, cellW, cellH, paletteIndices, grid } = payload;
+      const dmcIndices = new Uint16Array(grid);
+      const palette = paletteIndices.map(i => DMC_WITH_LAB[i]);
+      const stitchCounts = new Map();
+      paletteIndices.forEach(i => stitchCounts.set(i, 0));
+      for (let i = 0; i < W * H; i++) {
+        stitchCounts.set(dmcIndices[i], (stitchCounts.get(dmcIndices[i]) || 0) + 1);
+      }
+
+      patternData = { grid: dmcIndices, palette, paletteIndices, stitchCounts, W, H, cellW, cellH };
+      undoStack.length = 0;
+      redoStack.length = 0;
+      updateUndoRedoBtns();
+
+      // Update dimension inputs to reflect loaded pattern
+      document.getElementById('gridWidth').value = W;
+      document.getElementById('gridHeight').value = H;
+      // Set stitch ratio radio to match cellH
+      const ratioVal = cellH > cellW ? 'knit' : 'square';
+      document.querySelector(`input[name="grid_type"][value="${ratioVal}"]`).checked = true;
+
+      renderCanvas();
+      renderSummary();
+
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('patternContainer').classList.remove('hidden');
+      document.getElementById('summaryPanel').classList.remove('hidden');
+      setView('pattern');
+      requestAnimationFrame(() => requestAnimationFrame(fitToCanvas));
+
+      showToast('Pattern imported!');
+    } catch (err) {
+      showToast('Could not load file. Is it a valid .knitmate file?');
+    }
+    this.value = ''; // reset so same file can be re-imported
+  };
+  reader.readAsText(file);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Color Replace Modal
 // ─────────────────────────────────────────────────────────────────────────────
 let colorReplaceTarget = null; // oldDmcIdx
 let colorReplacePixel = null;  // {x, y} when replacing a single pixel, null for full replace
+let colorReplaceScope = 'all'; // 'all' | 'selection'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Area Select Tool
+// ─────────────────────────────────────────────────────────────────────────────
+let selectionActive = false;
+const selectedPixels = new Set(); // keys: "x,y"
+
+// Drag state (in unscaled canvas pixel coords)
+let selDragging = false;
+let selDragStartPx = null; // { x, y }
+let selDragEndPx = null;   // { x, y }
+
+const selectionCanvas = document.getElementById('selectionCanvas');
+const selCtx = selectionCanvas.getContext('2d');
+
+const selectToolBtn = document.getElementById('selectToolBtn');
+selectToolBtn.addEventListener('click', () => {
+  selectionActive = !selectionActive;
+  selectToolBtn.classList.toggle('bg-brand-light', selectionActive);
+  selectToolBtn.classList.toggle('border-brand-dark', selectionActive);
+  document.getElementById('canvasWrapper').style.cursor = selectionActive ? 'crosshair' : 'pointer';
+  if (!selectionActive) {
+    selectedPixels.clear();
+    selectionCanvas.style.display = 'none';
+    updateSelectionBar();
+    if (patternData) renderCanvas();
+  }
+});
+
+function clientToCanvas(e) {
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  return {
+    x: (e.clientX - rect.left) / scale,
+    y: (e.clientY - rect.top) / scale
+  };
+}
+
+patternCanvas.addEventListener('mousedown', (e) => {
+  if (!selectionActive || !patternData) return;
+  e.preventDefault();
+  const pos = clientToCanvas(e);
+  selDragging = true;
+  selDragStartPx = pos;
+  selDragEndPx = pos;
+  selectionCanvas.width = patternCanvas.width;
+  selectionCanvas.height = patternCanvas.height;
+  selectionCanvas.style.display = 'block';
+});
+
+patternCanvas.addEventListener('mousemove', (e) => {
+  if (!selDragging || !patternData) return;
+  selDragEndPx = clientToCanvas(e);
+  drawRubberBand();
+});
+
+patternCanvas.addEventListener('mouseup', (e) => {
+  if (!selDragging || !patternData) return;
+  selDragging = false;
+  selDragEndPx = clientToCanvas(e);
+  selectionCanvas.style.display = 'none';
+  selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+  commitAreaSelection();
+});
+
+patternCanvas.addEventListener('mouseleave', (e) => {
+  if (selDragging && patternData) {
+    selDragging = false;
+    selectionCanvas.style.display = 'none';
+    selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    commitAreaSelection();
+  }
+});
+
+function drawRubberBand() {
+  const { cellW, cellH, W, H } = patternData;
+  selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+
+  // Snap start/end to cell boundaries
+  const x0 = Math.max(0, Math.min(Math.floor(selDragStartPx.x / cellW), W - 1));
+  const y0 = Math.max(0, Math.min(Math.floor(selDragStartPx.y / cellH), H - 1));
+  const x1 = Math.max(0, Math.min(Math.floor(selDragEndPx.x / cellW), W - 1));
+  const y1 = Math.max(0, Math.min(Math.floor(selDragEndPx.y / cellH), H - 1));
+
+  const rx = Math.min(x0, x1) * cellW;
+  const ry = Math.min(y0, y1) * cellH;
+  const rw = (Math.abs(x1 - x0) + 1) * cellW;
+  const rh = (Math.abs(y1 - y0) + 1) * cellH;
+
+  // Semi-transparent fill
+  selCtx.fillStyle = 'rgba(99, 102, 241, 0.18)';
+  selCtx.fillRect(rx, ry, rw, rh);
+
+  // Dashed border
+  selCtx.strokeStyle = 'rgba(99, 102, 241, 0.9)';
+  selCtx.lineWidth = 1.5;
+  selCtx.setLineDash([4, 3]);
+  selCtx.strokeRect(rx + 0.75, ry + 0.75, rw - 1.5, rh - 1.5);
+  selCtx.setLineDash([]);
+}
+
+function commitAreaSelection() {
+  if (!patternData || !selDragStartPx || !selDragEndPx) return;
+  const { cellW, cellH, W, H } = patternData;
+
+  const x0 = Math.max(0, Math.min(Math.floor(selDragStartPx.x / cellW), W - 1));
+  const y0 = Math.max(0, Math.min(Math.floor(selDragStartPx.y / cellH), H - 1));
+  const x1 = Math.max(0, Math.min(Math.floor(selDragEndPx.x / cellW), W - 1));
+  const y1 = Math.max(0, Math.min(Math.floor(selDragEndPx.y / cellH), H - 1));
+
+  const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
+  const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+
+  selectedPixels.clear();
+  for (let cy = minY; cy <= maxY; cy++) {
+    for (let cx = minX; cx <= maxX; cx++) {
+      selectedPixels.add(`${cx},${cy}`);
+    }
+  }
+
+  selDragStartPx = null;
+  selDragEndPx = null;
+  updateSelectionBar();
+  renderCanvas();
+}
+
+// Finalize drag if mouse released anywhere outside canvas
+document.addEventListener('mouseup', () => {
+  if (selDragging && patternData) {
+    selDragging = false;
+    selectionCanvas.style.display = 'none';
+    selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    commitAreaSelection();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paint Tool
+// ─────────────────────────────────────────────────────────────────────────────
+let paintActive = false;
+let activePaintDmcIdx = null;
+let isPainting = false;
+
+const paintToolBtn = document.getElementById('paintToolBtn');
+const paintColorDisplay = document.getElementById('paintColorDisplay');
+
+paintToolBtn.addEventListener('click', () => {
+  paintActive = !paintActive;
+  paintToolBtn.classList.toggle('bg-brand-light', paintActive);
+  paintToolBtn.classList.toggle('border-brand-dark', paintActive);
+  if (!paintActive) {
+    paintColorDisplay.classList.add('hidden');
+    paintColorDisplay.classList.remove('flex');
+    document.getElementById('canvasWrapper').style.cursor = 'pointer';
+  } else {
+    document.getElementById('canvasWrapper').style.cursor = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z' fill='%23000'/%3E%3C/svg%3E\") 3 21, crosshair";
+    // Auto-select a default color if none is active yet
+    if (activePaintDmcIdx === null) {
+      const defaultIdx = (patternData && patternData.paletteIndices.length > 0)
+        ? patternData.paletteIndices[0]
+        : 0;
+      setActivePaintColor(defaultIdx);
+    } else {
+      paintColorDisplay.classList.remove('hidden');
+      paintColorDisplay.classList.add('flex');
+    }
+    // Deactivate select tool if on
+    if (selectionActive) {
+      selectionActive = false;
+      selectToolBtn.classList.remove('bg-brand-light', 'border-brand-dark');
+      selectedPixels.clear();
+      selectionCanvas.style.display = 'none';
+      updateSelectionBar();
+      if (patternData) renderCanvas();
+    }
+  }
+  updatePaintSwatchHighlight();
+});
+
+function setActivePaintColor(dmcIdx) {
+  activePaintDmcIdx = dmcIdx;
+  const dmc = DMC_WITH_LAB[dmcIdx];
+  document.getElementById('paintColorSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+  document.getElementById('paintColorLabel').textContent = `DMC ${dmc.id} · ${dmc.name}`;
+  paintColorDisplay.classList.remove('hidden');
+  paintColorDisplay.classList.add('flex');
+  updatePaintSwatchHighlight();
+}
+
+function updatePaintSwatchHighlight() {
+  document.querySelectorAll('[data-dmc-idx-swatch]').forEach(el => {
+    const idx = parseInt(el.dataset.dmcIdxSwatch);
+    if (paintActive && idx === activePaintDmcIdx) {
+      el.style.outline = '2px solid #7c5c3e';
+      el.style.outlineOffset = '2px';
+    } else {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    }
+  });
+}
+
+// Paint Color Picker Modal
+function openPaintColorModal() {
+  document.getElementById('pcSearch').value = '';
+  document.getElementById('pcHexInput').value = '';
+  document.getElementById('pcPickerPreview').style.background = '#cccccc';
+  document.getElementById('pcNearestInfo').classList.add('hidden');
+  renderPaintColorList('', activePaintDmcIdx);
+  document.getElementById('paintColorModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('pcSearch').focus(), 50);
+}
+
+function closePaintColorModal() {
+  document.getElementById('paintColorModal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderPaintColorList(query, highlightIdx = null) {
+  const list = document.getElementById('pcList');
+  list.innerHTML = '';
+  const q = query.toLowerCase().trim();
+  const indexed = DMC_WITH_LAB.map((dmc, dmcIdx) => ({ dmc, dmcIdx }));
+  const filtered = q
+    ? indexed.filter(({ dmc }) => dmc.id.toLowerCase().includes(q) || dmc.name.toLowerCase().includes(q))
+    : indexed;
+
+  const limit = Math.min(filtered.length, 150);
+  for (let fi = 0; fi < limit; fi++) {
+    const { dmc, dmcIdx } = filtered[fi];
+    const item = document.createElement('button');
+    item.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left';
+    item.dataset.dmcIdx = dmcIdx;
+    if (highlightIdx !== null && dmcIdx === highlightIdx) item.classList.add('bg-brand-light');
+    item.innerHTML = `
+      <div class="w-6 h-6 rounded-md border border-gray-200 flex-shrink-0" style="background:rgb(${dmc.r},${dmc.g},${dmc.b})"></div>
+      <span class="text-sm font-semibold text-brand-dark w-14 flex-shrink-0">${dmc.id}</span>
+      <span class="text-sm text-brand-darker truncate">${dmc.name}</span>
+    `;
+    item.addEventListener('click', () => {
+      setActivePaintColor(dmcIdx);
+      closePaintColorModal();
+    });
+    list.appendChild(item);
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<p class="text-sm text-brand-gray text-center py-8">No colors found</p>';
+  }
+
+  if (highlightIdx !== null) {
+    const target = list.querySelector(`[data-dmc-idx="${highlightIdx}"]`);
+    if (target) target.scrollIntoView({ block: 'center' });
+  }
+}
+
+paintColorDisplay.addEventListener('click', () => {
+  if (paintActive) openPaintColorModal();
+});
+
+document.getElementById('pcSearch').addEventListener('input', e => renderPaintColorList(e.target.value));
+
+document.getElementById('pcPickerPreview').addEventListener('click', () => {
+  document.getElementById('pcColorNative').click();
+});
+document.getElementById('pcColorNative').addEventListener('input', e => {
+  const hex = e.target.value;
+  document.getElementById('pcPickerPreview').style.background = hex;
+  document.getElementById('pcHexInput').value = hex.toUpperCase();
+  applyPickedPaintColor(hex);
+});
+document.getElementById('pcHexInput').addEventListener('input', e => {
+  let hex = e.target.value.trim();
+  if (!hex.startsWith('#')) hex = '#' + hex;
+  document.getElementById('pcHexInput').value = hex.toUpperCase();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    document.getElementById('pcPickerPreview').style.background = hex;
+    document.getElementById('pcColorNative').value = hex.toLowerCase();
+    applyPickedPaintColor(hex);
+  }
+});
+
+function applyPickedPaintColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/i.test(hex)) return;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const idx = nearestDMCIndex(r, g, b);
+  const dmc = DMC_WITH_LAB[idx];
+  document.getElementById('pcNearestInfo').classList.remove('hidden');
+  document.getElementById('pcNearestSwatch').style.background = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+  document.getElementById('pcNearestLabel').textContent = `DMC ${dmc.id} · ${dmc.name}`;
+  document.getElementById('pcSearch').value = '';
+  renderPaintColorList('', idx);
+}
+
+document.getElementById('pcCancelBtn').addEventListener('click', closePaintColorModal);
+document.getElementById('paintColorModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closePaintColorModal();
+});
+
+// Crop drag: mousedown near grid edge starts a crop drag
+patternCanvas.addEventListener('mousedown', (e) => {
+  if (!patternData || paintActive || selectionActive || e.button !== 0) return;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const canvasX = (e.clientX - rect.left) / scale;
+  const canvasY = (e.clientY - rect.top) / scale;
+  const edge = detectCropEdge(canvasX, canvasY);
+  if (!edge) return;
+  e.preventDefault();
+  cropDragging = true;
+  cropEdge = edge;
+  const { cellW, cellH, W, H } = patternData;
+  if (edge === 'left' || edge === 'right') {
+    cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasX / cellW), W - 1));
+  } else {
+    cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasY / cellH), H - 1));
+  }
+  selectionCanvas.width = patternCanvas.width;
+  selectionCanvas.height = patternCanvas.height;
+  selectionCanvas.style.display = 'block';
+  drawCropPreview(cropEdge, cropPreviewCell);
+});
+
+// Crop drag: mousemove updates preview line
+patternCanvas.addEventListener('mousemove', (e) => {
+  if (!cropDragging || !patternData) return;
+  const { cellW, cellH, W, H } = patternData;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const canvasX = (e.clientX - rect.left) / scale;
+  const canvasY = (e.clientY - rect.top) / scale;
+  if (cropEdge === 'left' || cropEdge === 'right') {
+    cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasX / cellW), W - 1));
+  } else {
+    cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasY / cellH), H - 1));
+  }
+  drawCropPreview(cropEdge, cropPreviewCell);
+});
+
+// Paint on canvas: mousedown starts, mousemove paints while held, mouseup finalizes
+patternCanvas.addEventListener('mousedown', (e) => {
+  if (!paintActive || !patternData || activePaintDmcIdx === null) return;
+  if (e.button !== 0) return;
+  e.preventDefault();
+  saveUndoState(); // save once at stroke start
+  isPainting = true;
+  const { cellW, cellH, W, H } = patternData;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
+  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
+  if (x >= 0 && x < W && y >= 0 && y < H) replaceSinglePixel(x, y, activePaintDmcIdx, true);
+});
+
+patternCanvas.addEventListener('mousemove', (e) => {
+  if (!isPainting || !paintActive || !patternData || activePaintDmcIdx === null) return;
+  const { cellW, cellH, W, H } = patternData;
+  const rect = patternCanvas.getBoundingClientRect();
+  const scale = currentZoom / 100;
+  const x = Math.floor((e.clientX - rect.left) / scale / cellW);
+  const y = Math.floor((e.clientY - rect.top) / scale / cellH);
+  if (x >= 0 && x < W && y >= 0 && y < H) replaceSinglePixel(x, y, activePaintDmcIdx, true);
+});
+
+document.addEventListener('mouseup', () => {
+  if (isPainting) {
+    isPainting = false;
+    if (patternData) { renderSummary(); }
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (!cropDragging) return;
+  cropDragging = false;
+  selectionCanvas.style.display = 'none';
+  selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+  document.getElementById('canvasWrapper').style.cursor = '';
+  if (cropPreviewCell >= 0 && cropEdge) {
+    suppressNextClick = true;
+    applyCrop(cropEdge, cropPreviewCell);
+  }
+  cropEdge = null;
+  cropPreviewCell = -1;
+});
+
+function updateSelectionBar() {
+  const bar = document.getElementById('selectionBar');
+  const count = selectedPixels.size;
+  if (count === 0) {
+    bar.classList.add('hidden');
+  } else {
+    bar.classList.remove('hidden');
+    document.getElementById('selectionCount').textContent =
+      `${count} pixel${count !== 1 ? 's' : ''} selected`;
+  }
+}
+
+document.getElementById('selectionClearBtn').addEventListener('click', () => {
+  selectedPixels.clear();
+  updateSelectionBar();
+  if (patternData) renderCanvas();
+});
+
+document.getElementById('selectionReplaceBtn').addEventListener('click', () => {
+  if (selectedPixels.size === 0) return;
+  colorReplaceScope = 'selection';
+  colorReplaceTarget = null;
+  document.getElementById('crCurrentSwatch').style.background = 'linear-gradient(135deg, #c49270 25%, transparent 25%) -10px 0, linear-gradient(225deg, #c49270 25%, transparent 25%) -10px 0, linear-gradient(315deg, #c49270 25%, transparent 25%), linear-gradient(45deg, #c49270 25%, transparent 25%)';
+  document.getElementById('crCurrentId').textContent = 'Selection';
+  document.getElementById('crCurrentName').textContent = `${selectedPixels.size} pixel${selectedPixels.size !== 1 ? 's' : ''}`;
+  document.getElementById('crHexInput').value = '';
+  document.getElementById('crPickerPreview').style.background = '#cccccc';
+  document.getElementById('crNearestInfo').classList.add('hidden');
+  document.getElementById('crSearch').value = '';
+  renderColorReplaceList('');
+  document.getElementById('colorReplaceModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('crSearch').focus(), 50);
+});
+
+function paintSelectedPixels(newDmcIdx) {
+  if (!patternData || selectedPixels.size === 0) return;
+  const { grid, palette, paletteIndices, stitchCounts, W } = patternData;
+
+  // Ensure new color is in the palette
+  if (!paletteIndices.includes(newDmcIdx)) {
+    paletteIndices.push(newDmcIdx);
+    palette.push(DMC_WITH_LAB[newDmcIdx]);
+    stitchCounts.set(newDmcIdx, 0);
+  }
+
+  for (const key of selectedPixels) {
+    const [x, y] = key.split(',').map(Number);
+    const i = y * W + x;
+    const oldDmcIdx = grid[i];
+    if (oldDmcIdx === newDmcIdx) continue;
+    stitchCounts.set(oldDmcIdx, (stitchCounts.get(oldDmcIdx) || 1) - 1);
+    stitchCounts.set(newDmcIdx, (stitchCounts.get(newDmcIdx) || 0) + 1);
+    grid[i] = newDmcIdx;
+  }
+
+  // Remove palette entries that no longer have any stitches
+  for (let i = paletteIndices.length - 1; i >= 0; i--) {
+    if ((stitchCounts.get(paletteIndices[i]) || 0) <= 0) {
+      stitchCounts.delete(paletteIndices[i]);
+      palette.splice(i, 1);
+      paletteIndices.splice(i, 1);
+    }
+  }
+
+  renderCanvas();
+  renderSummary();
+  const n = selectedPixels.size;
+  showToast(`${n} pixel${n !== 1 ? 's' : ''} painted!`);
+}
 
 function openColorReplaceModal(dmcIdx, pixel) {
+  colorReplaceScope = 'all';
   colorReplaceTarget = dmcIdx;
   colorReplacePixel = pixel || null;
   const dmc = DMC_WITH_LAB[dmcIdx];
@@ -1373,14 +2043,8 @@ function renderColorReplaceList(query, highlightIdx = null) {
   const list = document.getElementById('crList');
   list.innerHTML = '';
   const q = query.toLowerCase().trim();
-  const indexed = DMC_WITH_LAB.map((dmc, dmcIdx) => ({ dmc, dmcIdx }));
-  const filtered = q
-    ? indexed.filter(({ dmc }) => dmc.id.toLowerCase().includes(q) || dmc.name.toLowerCase().includes(q))
-    : indexed;
 
-  const limit = Math.min(filtered.length, 150);
-  for (let fi = 0; fi < limit; fi++) {
-    const { dmc, dmcIdx } = filtered[fi];
+  function makeItem(dmc, dmcIdx) {
     const item = document.createElement('button');
     item.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left';
     item.dataset.dmcIdx = dmcIdx;
@@ -1394,15 +2058,55 @@ function renderColorReplaceList(query, highlightIdx = null) {
     item.addEventListener('click', () => {
       if (colorReplacePixel) {
         replaceSinglePixel(colorReplacePixel.x, colorReplacePixel.y, dmcIdx);
+      } else if (colorReplaceScope === 'selection') {
+        paintSelectedPixels(dmcIdx);
       } else {
         replacePatternColor(colorReplaceTarget, dmcIdx);
       }
       closeColorReplaceModal();
     });
-    list.appendChild(item);
+    return item;
   }
 
-  if (filtered.length === 0) {
+  // Current palette colors section
+  const currentPaletteIndices = patternData ? patternData.paletteIndices : [];
+  const currentPaletteSet = new Set(currentPaletteIndices);
+
+  const paletteIndexed = currentPaletteIndices.map(dmcIdx => ({ dmc: DMC_WITH_LAB[dmcIdx], dmcIdx }));
+  const paletteFiltered = q
+    ? paletteIndexed.filter(({ dmc }) => dmc.id.toLowerCase().includes(q) || dmc.name.toLowerCase().includes(q))
+    : paletteIndexed;
+
+  if (paletteFiltered.length > 0) {
+    const label = document.createElement('p');
+    label.className = 'text-xs font-semibold text-brand-gray uppercase tracking-wide px-3 pt-3 pb-1';
+    label.textContent = 'Current Colors';
+    list.appendChild(label);
+    paletteFiltered.forEach(({ dmc, dmcIdx }) => list.appendChild(makeItem(dmc, dmcIdx)));
+
+    const divider = document.createElement('div');
+    divider.className = 'mx-3 my-2 border-t border-gray-100';
+    list.appendChild(divider);
+
+    const allLabel = document.createElement('p');
+    allLabel.className = 'text-xs font-semibold text-brand-gray uppercase tracking-wide px-3 pb-1';
+    allLabel.textContent = 'All DMC Colors';
+    list.appendChild(allLabel);
+  }
+
+  // All other DMC colors
+  const indexed = DMC_WITH_LAB.map((dmc, dmcIdx) => ({ dmc, dmcIdx }))
+    .filter(({ dmcIdx }) => !currentPaletteSet.has(dmcIdx));
+  const filtered = q
+    ? indexed.filter(({ dmc }) => dmc.id.toLowerCase().includes(q) || dmc.name.toLowerCase().includes(q))
+    : indexed;
+
+  const limit = Math.min(filtered.length, 150);
+  for (let fi = 0; fi < limit; fi++) {
+    list.appendChild(makeItem(filtered[fi].dmc, filtered[fi].dmcIdx));
+  }
+
+  if (paletteFiltered.length === 0 && filtered.length === 0) {
     list.innerHTML = '<p class="text-sm text-brand-gray text-center py-8">No colors found</p>';
   }
 
@@ -1414,12 +2118,13 @@ function renderColorReplaceList(query, highlightIdx = null) {
 }
 
 function snapshotPatternData() {
-  const { grid, palette, paletteIndices, stitchCounts } = patternData;
+  const { grid, palette, paletteIndices, stitchCounts, W, H } = patternData;
   return {
     grid: new Uint16Array(grid),
     palette: palette.slice(),
     paletteIndices: paletteIndices.slice(),
     stitchCounts: new Map(stitchCounts),
+    W, H,
   };
 }
 
@@ -1428,9 +2133,15 @@ function restoreSnapshot(snap) {
   patternData.palette = snap.palette;
   patternData.paletteIndices = snap.paletteIndices;
   patternData.stitchCounts = snap.stitchCounts;
+  if (snap.W !== undefined) {
+    patternData.W = snap.W;
+    patternData.H = snap.H;
+    document.getElementById('gridWidth').value = snap.W;
+    document.getElementById('gridHeight').value = snap.H;
+  }
   renderCanvas();
-  renderLegend();
   renderSummary();
+  requestAnimationFrame(fitToCanvas);
 }
 
 function updateUndoRedoBtns() {
@@ -1461,14 +2172,14 @@ function redo() {
   showToast('Redone');
 }
 
-function replaceSinglePixel(x, y, newDmcIdx) {
+function replaceSinglePixel(x, y, newDmcIdx, silent = false) {
   if (!patternData) return;
   const { grid, palette, paletteIndices, stitchCounts, W } = patternData;
   const idx = y * W + x;
   const oldDmcIdx = grid[idx];
   if (oldDmcIdx === newDmcIdx) return;
 
-  saveUndoState();
+  if (!silent) saveUndoState();
 
   // Update grid
   grid[idx] = newDmcIdx;
@@ -1496,9 +2207,10 @@ function replaceSinglePixel(x, y, newDmcIdx) {
   }
 
   renderCanvas();
-  renderLegend();
-  renderSummary();
-  showToast('Pixel color changed!');
+  if (!silent) {
+    renderSummary();
+    showToast('Pixel color changed!');
+  }
 }
 
 function replacePatternColor(oldDmcIdx, newDmcIdx) {
@@ -1527,7 +2239,6 @@ function replacePatternColor(oldDmcIdx, newDmcIdx) {
   }
 
   renderCanvas();
-  renderLegend();
   renderSummary();
   showToast('Color replaced!');
 }
@@ -1605,8 +2316,162 @@ document.getElementById('mobileMenuBtn').addEventListener('click', function() {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Crop (drag border to trim grid)
+// ─────────────────────────────────────────────────────────────────────────────
+function detectCropEdge(canvasX, canvasY) {
+  if (!patternData) return null;
+  const { W, H, cellW, cellH } = patternData;
+  const gridW = W * cellW;
+  const gridH = H * cellH;
+  const T = CROP_EDGE_THRESHOLD;
+  if (canvasX >= -T && canvasX <= T && canvasY >= 0 && canvasY <= gridH) return 'left';
+  if (canvasX >= gridW - T && canvasX <= gridW + T && canvasY >= 0 && canvasY <= gridH) return 'right';
+  if (canvasY >= -T && canvasY <= T && canvasX >= 0 && canvasX <= gridW) return 'top';
+  if (canvasY >= gridH - T && canvasY <= gridH + T && canvasX >= 0 && canvasX <= gridW) return 'bottom';
+  return null;
+}
+
+function drawCropPreview(edge, cellIdx) {
+  if (!patternData) return;
+  const { W, H, cellW, cellH } = patternData;
+  selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+
+  let lineX1, lineY1, lineX2, lineY2;
+  let shadeX, shadeY, shadeW, shadeH;
+
+  if (edge === 'left') {
+    shadeX = 0; shadeY = 0; shadeW = cellIdx * cellW; shadeH = H * cellH;
+    lineX1 = cellIdx * cellW; lineY1 = 0; lineX2 = cellIdx * cellW; lineY2 = H * cellH;
+  } else if (edge === 'right') {
+    const keepW = (cellIdx + 1) * cellW;
+    shadeX = keepW; shadeY = 0; shadeW = W * cellW - keepW; shadeH = H * cellH;
+    lineX1 = keepW; lineY1 = 0; lineX2 = keepW; lineY2 = H * cellH;
+  } else if (edge === 'top') {
+    shadeX = 0; shadeY = 0; shadeW = W * cellW; shadeH = cellIdx * cellH;
+    lineX1 = 0; lineY1 = cellIdx * cellH; lineX2 = W * cellW; lineY2 = cellIdx * cellH;
+  } else { // bottom
+    const keepH = (cellIdx + 1) * cellH;
+    shadeX = 0; shadeY = keepH; shadeW = W * cellW; shadeH = H * cellH - keepH;
+    lineX1 = 0; lineY1 = keepH; lineX2 = W * cellW; lineY2 = keepH;
+  }
+
+  if (shadeW > 0 && shadeH > 0) {
+    selCtx.fillStyle = 'rgba(220, 38, 38, 0.25)';
+    selCtx.fillRect(shadeX, shadeY, shadeW, shadeH);
+  }
+  selCtx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+  selCtx.lineWidth = 2;
+  selCtx.setLineDash([5, 3]);
+  selCtx.beginPath();
+  selCtx.moveTo(lineX1, lineY1);
+  selCtx.lineTo(lineX2, lineY2);
+  selCtx.stroke();
+  selCtx.setLineDash([]);
+}
+
+function applyCrop(edge, cellIdx) {
+  if (!patternData) return;
+  const { grid, W, H, cellW, cellH, palette, paletteIndices, stitchCounts } = patternData;
+
+  let x0 = 0, y0 = 0, newW = W, newH = H;
+  if (edge === 'left')   { x0 = Math.max(0, Math.min(cellIdx, W - 1)); newW = W - x0; }
+  else if (edge === 'right')  { newW = Math.max(1, Math.min(cellIdx + 1, W)); }
+  else if (edge === 'top')    { y0 = Math.max(0, Math.min(cellIdx, H - 1)); newH = H - y0; }
+  else if (edge === 'bottom') { newH = Math.max(1, Math.min(cellIdx + 1, H)); }
+
+  if (newW === W && newH === H) return;
+
+  saveUndoState();
+
+  const newGrid = new Uint16Array(newW * newH);
+  for (let y = 0; y < newH; y++) {
+    for (let x = 0; x < newW; x++) {
+      newGrid[y * newW + x] = grid[(y + y0) * W + (x + x0)];
+    }
+  }
+
+  const newStitchCounts = new Map();
+  paletteIndices.forEach(pi => newStitchCounts.set(pi, 0));
+  for (let i = 0; i < newW * newH; i++) {
+    newStitchCounts.set(newGrid[i], (newStitchCounts.get(newGrid[i]) || 0) + 1);
+  }
+  const newPaletteIndices = paletteIndices.filter(pi => (newStitchCounts.get(pi) || 0) > 0);
+  const newPalette = newPaletteIndices.map(pi => DMC_WITH_LAB[pi]);
+
+  patternData = { ...patternData, grid: newGrid, W: newW, H: newH,
+                  palette: newPalette, paletteIndices: newPaletteIndices,
+                  stitchCounts: newStitchCounts };
+
+  document.getElementById('gridWidth').value = newW;
+  document.getElementById('gridHeight').value = newH;
+
+  renderCanvas();
+  renderSummary();
+  requestAnimationFrame(fitToCanvas);
+  showToast(`Cropped to ${newW} × ${newH}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Color Picker / Color Change
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gauge Calculator
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  // Track which calculator was last used ('cm' or 'st')
+  let lastCalcMode = null;
+
+  function getGauge() {
+    const st = parseFloat(document.getElementById('gaugeStitches').value) || 0;
+    const ro = parseFloat(document.getElementById('gaugeRows').value) || 0;
+    return { st, ro };
+  }
+
+  function round1(n) { return Math.round(n * 10) / 10; }
+
+  // Stitches → cm
+  function calcStToCm() {
+    lastCalcMode = 'st';
+    const { st, ro } = getGauge();
+    const wSt = parseFloat(document.getElementById('gcWidthSt').value);
+    const result = document.getElementById('gcResultStToCm');
+    const hasW = !isNaN(wSt) && wSt > 0;
+    if (!hasW || !st) { result.classList.add('hidden'); return; }
+    result.classList.remove('hidden');
+    document.getElementById('gcWidthCmResult').innerHTML = `<span class="font-semibold">${wSt} sts</span> → <span class="font-bold">${round1(wSt / st * 10)} cm</span>`;
+    document.getElementById('gridWidth').value = Math.max(10, Math.min(300, Math.round(wSt)));
+    if (originalAspect) syncHeight(); else updateHeightDisplays();
+    scheduleRegen();
+  }
+
+  // cm → Stitches
+  function calcCmToSt() {
+    lastCalcMode = 'cm';
+    const { st } = getGauge();
+    const wCm = parseFloat(document.getElementById('gcWidthCm').value);
+    const result = document.getElementById('gcResultCmToSt');
+    const hasW = !isNaN(wCm) && wCm > 0;
+    if (!hasW || !st) { result.classList.add('hidden'); return; }
+    const calcW = Math.max(10, Math.min(300, Math.round(wCm / 10 * st)));
+    result.classList.remove('hidden');
+    document.getElementById('gcWidthStResult').innerHTML = `<span class="font-semibold">${wCm} cm</span> → <span class="font-bold">${calcW} sts</span>`;
+    document.getElementById('gridWidth').value = calcW;
+    if (originalAspect) syncHeight(); else updateHeightDisplays();
+    scheduleRegen();
+  }
+
+  document.getElementById('gcWidthSt').addEventListener('input', calcStToCm);
+  document.getElementById('gcWidthCm').addEventListener('input', calcCmToSt);
+  // Re-calc whichever mode was last used when gauge changes; always refresh height display
+  ['gaugeStitches','gaugeRows'].forEach(id => {
+    document.getElementById(id).addEventListener('input', function() {
+      if (lastCalcMode === 'st') calcStToCm();
+      else if (lastCalcMode === 'cm') calcCmToSt();
+      updateHeightDisplays();
+    });
+  });
+})();
 </script>
 </body>
 </html>

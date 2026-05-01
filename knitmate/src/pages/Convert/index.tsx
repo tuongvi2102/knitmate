@@ -96,7 +96,7 @@ function drawAxisLabels(ctx: CanvasRenderingContext2D, W: number, H: number, cel
 
 function drawChartKey(
   ctx: CanvasRenderingContext2D,
-  W: number, H: number, cellW: number, cellH: number,
+  _W: number, H: number, _cellW: number, cellH: number,
   palette: Array<{ r: number; g: number; b: number }>,
   paletteIndices: number[]
 ) {
@@ -205,7 +205,7 @@ export default function Convert() {
   const [gaugeRows, setGaugeRows] = useState('');
   const [gridWidth, setGridWidth] = useState(80);
   const [gridHeight, setGridHeight] = useState(68);
-  const [stitchRatio, setStitchRatio] = useState('square');
+  const [stitchRatio, _setStitchRatio] = useState('square');
   const [gcWidthCm, setGcWidthCm] = useState('');
   const [gcWidthSt, setGcWidthSt] = useState('');
   const [gcResultCm, setGcResultCm] = useState('');
@@ -265,7 +265,7 @@ export default function Convert() {
   const renderSummary = useCallback(() => {
     const pd = r.current.patternData;
     if (!pd) return;
-    const { palette, paletteIndices, stitchCounts, W, H } = pd;
+    const { palette, paletteIndices, W, H } = pd;
     const gs = parseInt(gaugeStitches) || 20;
     const gr = parseInt(gaugeRows) || 26;
     const estW = Math.round((W / gs) * 10);
@@ -580,7 +580,7 @@ export default function Convert() {
     const pd = r.current.patternData;
     if (!pd) return;
     saveUndoState();
-    const { grid, W, H, cellW, cellH, palette, paletteIndices, stitchCounts } = pd;
+    const { grid, W, H, palette, paletteIndices } = pd;
     let newW = W, newH = H, offsetX = 0, offsetY = 0;
     if (edge === 'left') { offsetX = cell; newW = W - cell; }
     else if (edge === 'right') { newW = cell + 1; }
@@ -650,24 +650,14 @@ export default function Convert() {
   // ── Canvas event listeners ───────────────────────────────────────────────────
 
   useEffect(() => {
-    const canvas = patternCanvasRef.current;
-    const selCanvas = selectionCanvasRef.current;
+    const canvas = patternCanvasRef.current!;
+    const selCanvas = selectionCanvasRef.current!;
     if (!canvas || !selCanvas) return;
 
     function clientToCanvas(e: MouseEvent) {
       const rect = canvas!.getBoundingClientRect();
       const scale = r.current.currentZoom / 100;
       return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
-    }
-
-    function getCellFromClient(e: MouseEvent) {
-      const pd = r.current.patternData;
-      if (!pd) return null;
-      const { x, y } = clientToCanvas(e);
-      const cx = Math.floor(x / pd.cellW);
-      const cy = Math.floor(y / pd.cellH);
-      if (cx < 0 || cx >= pd.W || cy < 0 || cy >= pd.H) return null;
-      return { x: cx, y: cy };
     }
 
     // Tooltip element
@@ -819,7 +809,7 @@ export default function Convert() {
       }
     }
 
-    function handleMouseUp(e: MouseEvent) {
+    function handleMouseUp(_e: MouseEvent) {
       // Paint tool
       if (r.current.isPainting) {
         r.current.isPainting = false;
@@ -927,7 +917,7 @@ export default function Convert() {
     reader.readAsDataURL(file);
   }
 
-  function updateHeightDisplay(w: number, h: number) {
+  function updateHeightDisplay(_w: number, h: number) {
     const ro = parseFloat(gaugeRows) || 0;
     const hCm = ro ? (Math.round(h / ro * 10 * 10) / 10) : null;
     setHeightDisplay(hCm ? `${h} rows · ${hCm} cm` : `${h} rows`);
@@ -966,7 +956,7 @@ export default function Convert() {
   function handleExportPNG() {
     const canvas = patternCanvasRef.current;
     if (!canvas?.width || !r.current.patternData) { showToast('Generate a pattern first.'); return; }
-    const { palette, paletteIndices, stitchCounts, W, H, cellW, cellH } = r.current.patternData;
+    const { palette, paletteIndices, stitchCounts } = r.current.patternData;
     const LEGEND_ROW_H = 28, LEGEND_PADDING = 40, TITLE_H = 60;
     const totalLegendH = LEGEND_PADDING + palette.length * LEGEND_ROW_H + 30;
     const exportH = TITLE_H + canvas.height + totalLegendH;

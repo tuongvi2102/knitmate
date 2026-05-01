@@ -284,7 +284,7 @@ export default function Design() {
   // ── Canvas event listeners ───────────────────────────────────────────────────
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasRef.current!;
     if (!canvas) return;
 
     function handleMouseDown(e: MouseEvent) {

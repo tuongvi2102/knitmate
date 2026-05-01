@@ -37,7 +37,7 @@ export default function Patterns() {
     setError(null);
     if (SUPABASE_CONFIGURED) {
       try {
-        const { data, error: err } = await supabase
+        const { data, error: err } = await supabase!
           .from('patterns')
           .select('*')
           .order('created_at', { ascending: false });

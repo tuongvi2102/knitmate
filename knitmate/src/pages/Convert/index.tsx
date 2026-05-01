@@ -28,8 +28,8 @@ interface PatternSnapshot {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const LABEL_PAD_X = 24;
-const LABEL_PAD_Y = 32;
+const LABEL_PAD_X = 50;
+const LABEL_PAD_Y = 50;
 const MAX_UNDO = 40;
 const CROP_EDGE_THRESHOLD = 10;
 
@@ -46,17 +46,19 @@ function computeCellSize(W: number, H: number, stitchRatio: string, availW: numb
   return { cellW, cellH };
 }
 
-function drawGridLines(ctx: CanvasRenderingContext2D, W: number, H: number, cellW: number, cellH: number) {
+function drawGridLines(ctx: CanvasRenderingContext2D, W: number, H: number, cellW: number, cellH: number, dpr: number) {
+  const thinLine = 1 / dpr;
+  const thickLine = 2 / dpr;
   for (let x = 0; x <= W; x++) {
     ctx.beginPath();
-    if (x % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
-    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    if (x > 0 && x % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = thickLine; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = thinLine; }
     ctx.moveTo(x * cellW, 0); ctx.lineTo(x * cellW, H * cellH); ctx.stroke();
   }
   for (let y = 0; y <= H; y++) {
     ctx.beginPath();
-    if (y % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; }
-    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5; }
+    if (y > 0 && y % 10 === 0) { ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = thickLine; }
+    else { ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = thinLine; }
     ctx.moveTo(0, y * cellH); ctx.lineTo(W * cellW, y * cellH); ctx.stroke();
   }
 }
@@ -67,16 +69,67 @@ function drawAxisLabels(ctx: CanvasRenderingContext2D, W: number, H: number, cel
   ctx.beginPath(); ctx.moveTo(0, H * cellH); ctx.lineTo(W * cellW, H * cellH); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(W * cellW, 0); ctx.lineTo(W * cellW, H * cellH); ctx.stroke();
   ctx.fillStyle = 'rgba(70,50,30,0.72)';
-  const fontSize = Math.max(5, Math.min(cellH - 1, cellW - 1, 9, LABEL_PAD_X - 4));
+  const fontSize = Math.max(7, Math.min(10, Math.floor(cellW * 1.5)));
   ctx.font = `bold ${fontSize}px sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (let c = 10; c <= W; c += 10) {
-    ctx.fillText(String(c), (c - 1) * cellW + cellW / 2, H * cellH + LABEL_PAD_X / 2);
+  // X-axis: vertical text, right to left (1 at rightmost), every 2 cells
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const maxLabelW = ctx.measureText(String(W)).width;
+  for (let c = 1; c <= W; c += 2) {
+    const xPos = (W - c) * cellW + cellW / 2;
+    ctx.save();
+    ctx.translate(xPos, H * cellH + 3);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(String(c), 0, 0);
+    ctx.restore();
   }
+  // Y-axis: bottom to top, every 2 rows (1, 3, 5…)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (let row = 1; row <= H; row += 2) {
+    ctx.fillText(String(row), W * cellW + 3, (H - row) * cellH + cellH / 2);
+  }
+  // "Start Here" below the vertical numbers, right-aligned to chart edge
+  ctx.font = `bold 9px sans-serif`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(70,50,30,0.9)';
+  ctx.fillText('Start Here', W * cellW, H * cellH + 3 + maxLabelW + 4);
+}
+
+function drawChartKey(
+  ctx: CanvasRenderingContext2D,
+  W: number, H: number, cellW: number, cellH: number,
+  palette: Array<{ r: number; g: number; b: number }>,
+  paletteIndices: number[]
+) {
+  const keyTopY = H * cellH + LABEL_PAD_X + 10;
+  const SWATCH = 13, GAP = 6, COL_W = 110, COLS = 3, ROW_H = 22;
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  // "Key" heading
+  ctx.fillStyle = 'rgba(40,30,20,0.85)';
+  ctx.font = 'bold 14px sans-serif';
   ctx.textAlign = 'left';
-  for (let r = 10; r <= H; r += 10) {
-    ctx.fillText(String(r), W * cellW + 3, (H - r) * cellH + cellH / 2);
-  }
+  ctx.textBaseline = 'top';
+  ctx.fillText('Key', 0, keyTopY);
+
+  // Color swatches with letter labels
+  const startY = keyTopY + 22;
+  paletteIndices.forEach((_dmcIdx, pos) => {
+    const dmc = palette[pos];
+    const col = pos % COLS;
+    const row = Math.floor(pos / COLS);
+    const x = col * COL_W;
+    const y = startY + row * ROW_H;
+    ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+    ctx.fillRect(x, y, SWATCH, SWATCH);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x, y, SWATCH, SWATCH);
+    ctx.fillStyle = 'rgba(40,30,20,0.85)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`= ${letters[pos] ?? String(pos + 1)}`, x + SWATCH + GAP, y + SWATCH / 2);
+  });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -169,9 +222,17 @@ export default function Convert() {
     const canvas = patternCanvasRef.current;
     if (!canvas) return;
     const { grid, palette, paletteIndices, W, H, cellW, cellH } = pd;
-    canvas.width = W * cellW + LABEL_PAD_Y;
-    canvas.height = H * cellH + LABEL_PAD_X;
+    const keyRows = Math.ceil(paletteIndices.length / 3);
+    const KEY_SECTION_H = 10 + 16 + 22 + keyRows * 22 + 16;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = W * cellW + LABEL_PAD_Y;
+    const cssH = H * cellH + LABEL_PAD_X + KEY_SECTION_H;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
     const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
 
     const paletteIndexMap = new Map(paletteIndices.map((dmcIdx, pos) => [dmcIdx, pos]));
     for (let y = 0; y < H; y++) {
@@ -183,8 +244,9 @@ export default function Convert() {
       }
     }
 
-    if (r.current.showGrid) drawGridLines(ctx, W, H, cellW, cellH);
+    if (r.current.showGrid) drawGridLines(ctx, W, H, cellW, cellH, dpr);
     drawAxisLabels(ctx, W, H, cellW, cellH);
+    drawChartKey(ctx, W, H, cellW, cellH, palette, paletteIndices);
 
     // Draw selection overlay
     const { selectedPixels } = r.current;
@@ -561,8 +623,11 @@ export default function Convert() {
     const pd = r.current.patternData;
     if (!selCanvas || !pd) return;
     const { W, H, cellW, cellH } = pd;
+    const dpr = window.devicePixelRatio || 1;
     const selCtx = selCanvas.getContext('2d')!;
     selCtx.clearRect(0, 0, selCanvas.width, selCanvas.height);
+    selCtx.save();
+    selCtx.scale(dpr, dpr);
     selCtx.fillStyle = 'rgba(239,68,68,0.18)';
     selCtx.strokeStyle = 'rgba(239,68,68,0.9)';
     selCtx.lineWidth = 2;
@@ -579,6 +644,7 @@ export default function Convert() {
       selCtx.fillRect(0, cell * cellH, W * cellW, H * cellH - cell * cellH);
       selCtx.beginPath(); selCtx.moveTo(0, cell * cellH); selCtx.lineTo(W * cellW, cell * cellH); selCtx.stroke();
     }
+    selCtx.restore();
   }
 
   // ── Canvas event listeners ───────────────────────────────────────────────────
@@ -669,8 +735,11 @@ export default function Convert() {
       const pd = r.current.patternData;
       if (!pd || !r.current.selDragStartPx || !r.current.selDragEndPx) return;
       const { cellW, cellH, W, H } = pd;
+      const dpr = window.devicePixelRatio || 1;
       const selCtx = selCanvas.getContext('2d')!;
       selCtx.clearRect(0, 0, selCanvas.width, selCanvas.height);
+      selCtx.save();
+      selCtx.scale(dpr, dpr);
       const x0 = Math.max(0, Math.min(Math.floor(r.current.selDragStartPx.x / cellW), W - 1));
       const y0 = Math.max(0, Math.min(Math.floor(r.current.selDragStartPx.y / cellH), H - 1));
       const x1 = Math.max(0, Math.min(Math.floor(r.current.selDragEndPx.x / cellW), W - 1));
@@ -684,6 +753,7 @@ export default function Convert() {
       selCtx.setLineDash([4, 3]);
       selCtx.strokeRect(rx + 0.75, ry + 0.75, rw - 1.5, rh - 1.5);
       selCtx.setLineDash([]);
+      selCtx.restore();
     }
 
     function commitAreaSelection() {
@@ -714,6 +784,7 @@ export default function Convert() {
         r.current.selDragStartPx = { x: canvasX, y: canvasY };
         r.current.selDragEndPx = { x: canvasX, y: canvasY };
         selCanvas.width = canvas.width; selCanvas.height = canvas.height;
+        selCanvas.style.width = canvas.style.width; selCanvas.style.height = canvas.style.height;
         selCanvas.style.display = 'block';
         return;
       }
@@ -742,6 +813,7 @@ export default function Convert() {
           ? Math.max(0, Math.min(Math.floor(canvasX / pd.cellW), pd.W - 1))
           : Math.max(0, Math.min(Math.floor(canvasY / pd.cellH), pd.H - 1));
         selCanvas.width = canvas.width; selCanvas.height = canvas.height;
+        selCanvas.style.width = canvas.style.width; selCanvas.style.height = canvas.style.height;
         selCanvas.style.display = 'block';
         drawCropPreview(edge, r.current.cropPreviewCell);
       }
@@ -912,13 +984,12 @@ export default function Convert() {
     ctx.font = '12px Inter,sans-serif'; ctx.fillStyle = '#9B9C8A';
     ctx.fillText('No.', 40, ly); ctx.fillText('DMC', 90, ly);
     ctx.fillText('Color Name', 160, ly);
-    ctx.fillText('Stitches', exportW - 160, ly); ctx.fillText('Skeins', exportW - 70, ly); ly += 6;
+    ctx.fillText('Stitches', exportW - 90, ly); ly += 6;
     ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(40, ly); ctx.lineTo(exportW - 40, ly); ctx.stroke(); ly += 10;
     const sorted = paletteIndices.map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
       .sort((a, b) => b.count - a.count);
     sorted.forEach(({ dmc, count }, i) => {
-      const skeins = Math.ceil(count / 150);
       const rowY = ly + i * LEGEND_ROW_H;
       ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
       ctx.fillRect(40, rowY - 14, 18, 18);
@@ -926,8 +997,7 @@ export default function Convert() {
       ctx.fillStyle = '#C49270'; ctx.font = 'bold 12px Inter,sans-serif'; ctx.fillText(dmc.id, 70, rowY);
       ctx.font = '12px Inter,sans-serif'; ctx.fillText(dmc.name, 140, rowY);
       ctx.textAlign = 'right';
-      ctx.fillText(count.toLocaleString(), exportW - 90, rowY);
-      ctx.fillText(String(skeins), exportW - 40, rowY);
+      ctx.fillText(count.toLocaleString(), exportW - 40, rowY);
       ctx.textAlign = 'left';
     });
     const link = document.createElement('a');
@@ -943,8 +1013,8 @@ export default function Convert() {
     const { palette, paletteIndices, stitchCounts } = r.current.patternData;
     const sorted = paletteIndices.map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
       .sort((a, b) => b.count - a.count);
-    const legendRows = sorted.map(({ dmc, count }, i) => `<tr><td>${i + 1}</td><td><div style="width:18px;height:18px;background:rgb(${dmc.r},${dmc.g},${dmc.b});border:1px solid #ccc;border-radius:3px"></div></td><td><strong>${dmc.id}</strong></td><td>${dmc.name}</td><td style="text-align:right">${count.toLocaleString()}</td><td style="text-align:right">${Math.ceil(count / 150)}</td></tr>`).join('');
-    win.document.write(`<!DOCTYPE html><html><head><title>KnitMate Pattern</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#C49270}h1{font-size:20px;margin-bottom:8px}img{max-width:100%;border:1px solid #eee}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:12px}th{border-bottom:2px solid #C49270;padding:6px 8px;text-align:left;font-size:11px;color:#777}td{border-bottom:1px solid #eee;padding:5px 8px;vertical-align:middle}@media print{body{margin:10px}}</style></head><body><h1>KnitMate Cross-Stitch Pattern</h1><img src="${canvas.toDataURL()}"><h2 style="font-size:16px;margin-top:24px">DMC Thread Legend</h2><table><thead><tr><th>#</th><th>Swatch</th><th>DMC No.</th><th>Color Name</th><th style="text-align:right">Stitches</th><th style="text-align:right">Skeins</th></tr></thead><tbody>${legendRows}</tbody></table><p style="font-size:11px;color:#777;margin-top:12px">* Skein estimate: ~150 stitches per skein at 14-count Aida, 2 strands.</p></body></html>`);
+    const legendRows = sorted.map(({ dmc, count }, i) => `<tr><td>${i + 1}</td><td><div style="width:18px;height:18px;background:rgb(${dmc.r},${dmc.g},${dmc.b});border:1px solid #ccc;border-radius:3px"></div></td><td><strong>${dmc.id}</strong></td><td>${dmc.name}</td><td style="text-align:right">${count.toLocaleString()}</td></tr>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>KnitMate Pattern</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#C49270}h1{font-size:20px;margin-bottom:8px}img{max-width:100%;border:1px solid #eee}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:12px}th{border-bottom:2px solid #C49270;padding:6px 8px;text-align:left;font-size:11px;color:#777}td{border-bottom:1px solid #eee;padding:5px 8px;vertical-align:middle}@media print{body{margin:10px}}</style></head><body><h1>KnitMate Cross-Stitch Pattern</h1><img src="${canvas.toDataURL()}"><h2 style="font-size:16px;margin-top:24px">DMC Thread Legend</h2><table><thead><tr><th>#</th><th>Swatch</th><th>DMC No.</th><th>Color Name</th><th style="text-align:right">Stitches</th></tr></thead><tbody>${legendRows}</tbody></table></body></html>`);
     win.document.close(); win.focus();
     setTimeout(() => win.print(), 500);
   }

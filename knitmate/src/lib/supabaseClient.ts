@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const url = import.meta.env.VITE_SUPABASE_URL;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = url?.startsWith('http') && key
-  ? createClient(url, key)
-  : null;
+const isValidUrl = (s: string) => { try { return !!new URL(s); } catch { return false; } };
+
+export const supabase = url && key && isValidUrl(url) ? createClient(url, key) : null;

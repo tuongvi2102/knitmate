@@ -32,6 +32,9 @@ const LABEL_PAD_X = 50;
 const LABEL_PAD_Y = 50;
 const MAX_UNDO = 40;
 const CROP_EDGE_THRESHOLD = 10;
+const MIN_GRID_DIM = 5;
+const MAX_GRID_DIM = 500;
+const WHITE_DMC_IDX = 0; // 'blanc' — first entry in DMC list, used to fill expanded cells
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -579,28 +582,47 @@ export default function Convert() {
   function applyCrop(edge: string, cell: number) {
     const pd = r.current.patternData;
     if (!pd) return;
-    saveUndoState();
     const { grid, W, H, palette, paletteIndices } = pd;
-    let newW = W, newH = H, offsetX = 0, offsetY = 0;
-    if (edge === 'left') { offsetX = cell; newW = W - cell; }
-    else if (edge === 'right') { newW = cell + 1; }
-    else if (edge === 'top') { offsetY = cell; newH = H - cell; }
-    else if (edge === 'bottom') { newH = cell + 1; }
-    if (newW < 5 || newH < 5) return;
+    // cell may be outside [0, W-1] / [0, H-1]: negative on left/top means expand,
+    // beyond W-1 / H-1 on right/bottom means expand.
+    let newW = W, newH = H;
+    let srcOffsetX = 0, srcOffsetY = 0, dstOffsetX = 0, dstOffsetY = 0;
+    if (edge === 'left') {
+      if (cell >= 0) { srcOffsetX = cell; newW = W - cell; }
+      else { dstOffsetX = -cell; newW = W - cell; }
+    } else if (edge === 'right') {
+      newW = cell + 1;
+    } else if (edge === 'top') {
+      if (cell >= 0) { srcOffsetY = cell; newH = H - cell; }
+      else { dstOffsetY = -cell; newH = H - cell; }
+    } else if (edge === 'bottom') {
+      newH = cell + 1;
+    }
+    if (newW < MIN_GRID_DIM || newH < MIN_GRID_DIM) return;
+    if (newW > MAX_GRID_DIM || newH > MAX_GRID_DIM) return;
+    if (newW === W && newH === H) return;
+    saveUndoState();
     const newGrid = new Uint16Array(newW * newH);
-    const newCounts = new Map<number, number>(paletteIndices.map(i => [i, 0]));
-    for (let y = 0; y < newH; y++) {
-      for (let x = 0; x < newW; x++) {
-        const srcIdx = (y + offsetY) * W + (x + offsetX);
-        const dmcIdx = grid[srcIdx];
-        newGrid[y * newW + x] = dmcIdx;
-        newCounts.set(dmcIdx, (newCounts.get(dmcIdx) || 0) + 1);
+    newGrid.fill(WHITE_DMC_IDX);
+    const copyW = Math.min(W - srcOffsetX, newW - dstOffsetX);
+    const copyH = Math.min(H - srcOffsetY, newH - dstOffsetY);
+    for (let y = 0; y < copyH; y++) {
+      for (let x = 0; x < copyW; x++) {
+        const srcIdx = (y + srcOffsetY) * W + (x + srcOffsetX);
+        newGrid[(y + dstOffsetY) * newW + (x + dstOffsetX)] = grid[srcIdx];
       }
     }
-    // Remove unused palette entries
+    const newCounts = new Map<number, number>();
+    for (let i = 0; i < newW * newH; i++) {
+      const idx = newGrid[i];
+      newCounts.set(idx, (newCounts.get(idx) || 0) + 1);
+    }
+    if ((newCounts.get(WHITE_DMC_IDX) || 0) > 0 && !paletteIndices.includes(WHITE_DMC_IDX)) {
+      paletteIndices.push(WHITE_DMC_IDX);
+      palette.push(DMC_WITH_LAB[WHITE_DMC_IDX]);
+    }
     for (let i = paletteIndices.length - 1; i >= 0; i--) {
-      if ((newCounts.get(paletteIndices[i]) || 0) === 0) {
-        newCounts.delete(paletteIndices[i]);
+      if (!newCounts.has(paletteIndices[i])) {
         palette.splice(i, 1);
         paletteIndices.splice(i, 1);
       }
@@ -624,25 +646,97 @@ export default function Convert() {
     if (!selCanvas || !pd) return;
     const { W, H, cellW, cellH } = pd;
     const dpr = window.devicePixelRatio || 1;
+    const isExpand =
+      ((edge === 'left' || edge === 'top') && cell < 0) ||
+      (edge === 'right' && cell >= W) ||
+      (edge === 'bottom' && cell >= H);
+
+    // Sel canvas spans the union of current grid and any expansion,
+    // shifted via negative left/top when expanding from left/top.
+    let extraLeft = 0, extraTop = 0;
+    let widthPx = W * cellW;
+    let heightPx = H * cellH;
+    if (edge === 'left' && cell < 0) { extraLeft = -cell * cellW; widthPx += extraLeft; }
+    if (edge === 'right' && cell >= W) { widthPx = (cell + 1) * cellW; }
+    if (edge === 'top' && cell < 0) { extraTop = -cell * cellH; heightPx += extraTop; }
+    if (edge === 'bottom' && cell >= H) { heightPx = (cell + 1) * cellH; }
+
+    selCanvas.width = Math.round(widthPx * dpr);
+    selCanvas.height = Math.round(heightPx * dpr);
+    selCanvas.style.width = widthPx + 'px';
+    selCanvas.style.height = heightPx + 'px';
+    selCanvas.style.left = -extraLeft + 'px';
+    selCanvas.style.top = -extraTop + 'px';
+
     const selCtx = selCanvas.getContext('2d')!;
     selCtx.clearRect(0, 0, selCanvas.width, selCanvas.height);
     selCtx.save();
     selCtx.scale(dpr, dpr);
-    selCtx.fillStyle = 'rgba(239,68,68,0.18)';
-    selCtx.strokeStyle = 'rgba(239,68,68,0.9)';
+    selCtx.fillStyle = isExpand ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
+    selCtx.strokeStyle = isExpand ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)';
     selCtx.lineWidth = 2;
+
+    // All shape coords are in the selCanvas frame, so add extraLeft/extraTop to anchor
+    // the original grid. Coordinates outside [extraLeft, extraLeft+W*cellW] etc. are the expansion area.
+    const ox = extraLeft, oy = extraTop;
     if (edge === 'left') {
-      selCtx.fillRect(0, 0, (cell + 1) * cellW, H * cellH);
-      selCtx.beginPath(); selCtx.moveTo((cell + 1) * cellW, 0); selCtx.lineTo((cell + 1) * cellW, H * cellH); selCtx.stroke();
+      if (cell >= 0) {
+        // Crop: highlight columns 0..cell that will be removed
+        selCtx.fillRect(ox, oy, (cell + 1) * cellW, H * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox + (cell + 1) * cellW, oy);
+        selCtx.lineTo(ox + (cell + 1) * cellW, oy + H * cellH);
+        selCtx.stroke();
+      } else {
+        // Expand: highlight new area to the left of the current grid
+        selCtx.fillRect(0, oy, -cell * cellW, H * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(0, oy);
+        selCtx.lineTo(0, oy + H * cellH);
+        selCtx.stroke();
+      }
     } else if (edge === 'right') {
-      selCtx.fillRect((cell) * cellW, 0, W * cellW - cell * cellW, H * cellH);
-      selCtx.beginPath(); selCtx.moveTo(cell * cellW, 0); selCtx.lineTo(cell * cellW, H * cellH); selCtx.stroke();
+      if (cell < W) {
+        selCtx.fillRect(ox + cell * cellW, oy, (W - cell) * cellW, H * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox + cell * cellW, oy);
+        selCtx.lineTo(ox + cell * cellW, oy + H * cellH);
+        selCtx.stroke();
+      } else {
+        selCtx.fillRect(ox + W * cellW, oy, (cell + 1 - W) * cellW, H * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox + (cell + 1) * cellW, oy);
+        selCtx.lineTo(ox + (cell + 1) * cellW, oy + H * cellH);
+        selCtx.stroke();
+      }
     } else if (edge === 'top') {
-      selCtx.fillRect(0, 0, W * cellW, (cell + 1) * cellH);
-      selCtx.beginPath(); selCtx.moveTo(0, (cell + 1) * cellH); selCtx.lineTo(W * cellW, (cell + 1) * cellH); selCtx.stroke();
+      if (cell >= 0) {
+        selCtx.fillRect(ox, oy, W * cellW, (cell + 1) * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox, oy + (cell + 1) * cellH);
+        selCtx.lineTo(ox + W * cellW, oy + (cell + 1) * cellH);
+        selCtx.stroke();
+      } else {
+        selCtx.fillRect(ox, 0, W * cellW, -cell * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox, 0);
+        selCtx.lineTo(ox + W * cellW, 0);
+        selCtx.stroke();
+      }
     } else if (edge === 'bottom') {
-      selCtx.fillRect(0, cell * cellH, W * cellW, H * cellH - cell * cellH);
-      selCtx.beginPath(); selCtx.moveTo(0, cell * cellH); selCtx.lineTo(W * cellW, cell * cellH); selCtx.stroke();
+      if (cell < H) {
+        selCtx.fillRect(ox, oy + cell * cellH, W * cellW, (H - cell) * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox, oy + cell * cellH);
+        selCtx.lineTo(ox + W * cellW, oy + cell * cellH);
+        selCtx.stroke();
+      } else {
+        selCtx.fillRect(ox, oy + H * cellH, W * cellW, (cell + 1 - H) * cellH);
+        selCtx.beginPath();
+        selCtx.moveTo(ox, oy + (cell + 1) * cellH);
+        selCtx.lineTo(ox + W * cellW, oy + (cell + 1) * cellH);
+        selCtx.stroke();
+      }
     }
     selCtx.restore();
   }
@@ -702,16 +796,9 @@ export default function Convert() {
       if (r.current.isPainting && r.current.paintActive && r.current.activePaintDmcIdx !== null) {
         replaceSinglePixel(cx, cy, r.current.activePaintDmcIdx, true);
       }
-      // Crop drag update
-      if (r.current.cropDragging && pd) {
-        const { cellW, cellH, W, H } = pd;
-        if (r.current.cropEdge === 'left' || r.current.cropEdge === 'right') {
-          r.current.cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasX / cellW), W - 1));
-        } else {
-          r.current.cropPreviewCell = Math.max(0, Math.min(Math.floor(canvasY / cellH), H - 1));
-        }
-        drawCropPreview(r.current.cropEdge!, r.current.cropPreviewCell);
-      }
+      // Crop drag is handled on window-level mousemove so the cursor
+      // can leave the canvas while expanding.
+
       // Selection drag
       if (r.current.selDragging && pd) {
         r.current.selDragEndPx = { x: canvasX, y: canvasY };
@@ -792,7 +879,7 @@ export default function Convert() {
         return;
       }
 
-      // Crop drag
+      // Crop / resize drag
       const edge = detectCropEdge(canvasX, canvasY);
       if (edge) {
         e.preventDefault();
@@ -802,9 +889,10 @@ export default function Convert() {
         r.current.cropPreviewCell = edge === 'left' || edge === 'right'
           ? Math.max(0, Math.min(Math.floor(canvasX / pd.cellW), pd.W - 1))
           : Math.max(0, Math.min(Math.floor(canvasY / pd.cellH), pd.H - 1));
-        selCanvas.width = canvas.width; selCanvas.height = canvas.height;
-        selCanvas.style.width = canvas.style.width; selCanvas.style.height = canvas.style.height;
+        selCanvas.style.left = '0px';
+        selCanvas.style.top = '0px';
         selCanvas.style.display = 'block';
+        document.body.style.cursor = (edge === 'left' || edge === 'right') ? 'col-resize' : 'row-resize';
         drawCropPreview(edge, r.current.cropPreviewCell);
       }
     }
@@ -815,14 +903,17 @@ export default function Convert() {
         r.current.isPainting = false;
         if (r.current.patternData) renderSummary();
       }
-      // Crop drag
+      // Crop / resize drag
       if (r.current.cropDragging) {
         r.current.cropDragging = false;
         selCanvas.style.display = 'none';
+        selCanvas.style.left = '0px';
+        selCanvas.style.top = '0px';
         selCanvas.getContext('2d')!.clearRect(0, 0, selCanvas.width, selCanvas.height);
         const wrapper = document.getElementById('convert-canvas-wrapper');
         if (wrapper) wrapper.style.cursor = 'pointer';
-        if (r.current.cropPreviewCell >= 0 && r.current.cropEdge) {
+        document.body.style.cursor = '';
+        if (r.current.cropEdge !== null) {
           r.current.suppressNextClick = true;
           applyCrop(r.current.cropEdge, r.current.cropPreviewCell);
         }
@@ -850,10 +941,33 @@ export default function Convert() {
       openColorReplaceModal(dmcIdx, { x: cx, y: cy });
     }
 
+    function handleWindowMouseMove(e: MouseEvent) {
+      if (!r.current.cropDragging) return;
+      const pd = r.current.patternData;
+      if (!pd || !r.current.cropEdge) return;
+      const { x: canvasX, y: canvasY } = clientToCanvas(e);
+      const { cellW, cellH, W, H } = pd;
+      if (r.current.cropEdge === 'left') {
+        const cell = Math.floor(canvasX / cellW);
+        r.current.cropPreviewCell = Math.max(W - MAX_GRID_DIM, Math.min(cell, W - MIN_GRID_DIM));
+      } else if (r.current.cropEdge === 'right') {
+        const cell = Math.floor(canvasX / cellW);
+        r.current.cropPreviewCell = Math.max(MIN_GRID_DIM - 1, Math.min(cell, MAX_GRID_DIM - 1));
+      } else if (r.current.cropEdge === 'top') {
+        const cell = Math.floor(canvasY / cellH);
+        r.current.cropPreviewCell = Math.max(H - MAX_GRID_DIM, Math.min(cell, H - MIN_GRID_DIM));
+      } else if (r.current.cropEdge === 'bottom') {
+        const cell = Math.floor(canvasY / cellH);
+        r.current.cropPreviewCell = Math.max(MIN_GRID_DIM - 1, Math.min(cell, MAX_GRID_DIM - 1));
+      }
+      drawCropPreview(r.current.cropEdge, r.current.cropPreviewCell);
+    }
+
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseleave', handleMouseLeave);
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('click', handleClick);
+    window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleUp);
 
     function handleUp(e: MouseEvent) { handleMouseUp(e); }
@@ -863,6 +977,7 @@ export default function Convert() {
       canvas.removeEventListener('mouseleave', handleMouseLeave);
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('click', handleClick);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleUp);
       tooltip?.remove();
     };

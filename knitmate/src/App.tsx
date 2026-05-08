@@ -16,18 +16,21 @@ function RootLayout() {
   );
 }
 
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <RootLayout />,
-    children: [
-      { index: true, element: <Home /> },
-      { path: 'convert', element: <Convert /> },
-      { path: 'design', element: <Design /> },
-      { path: 'patterns', element: <Patterns /> },
-    ],
-  },
-]);
+const router = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <RootLayout />,
+      children: [
+        { index: true, element: <Home /> },
+        { path: 'convert', element: <Convert /> },
+        { path: 'design', element: <Design /> },
+        { path: 'patterns', element: <Patterns /> },
+      ],
+    },
+  ],
+  { basename: import.meta.env.BASE_URL.replace(/\/$/, '') }
+);
 
 export default function App() {
   return <RouterProvider router={router} />;

@@ -104,7 +104,8 @@ function drawChartKey(
   paletteIndices: number[]
 ) {
   const keyTopY = H * cellH + LABEL_PAD_X + 10;
-  const SWATCH = 13, GAP = 6, COL_W = 110, COLS = 3, ROW_H = 22;
+  const SWATCH = 13, GAP = 6, COL_W = 110, ROW_H = 22;
+  const COLS = paletteIndices.length < 5 ? paletteIndices.length : 3;
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   // "Key" heading
@@ -163,6 +164,11 @@ export default function Convert() {
     paintActive: false,
     activePaintDmcIdx: null as number | null,
     isPainting: false,
+    // Move tool
+    moveActive: false,
+    moveDragging: false,
+    moveDragStart: null as { x: number; y: number } | null,
+    moveDragCurrent: null as { x: number; y: number } | null,
     // Crop
     cropDragging: false,
     cropEdge: null as string | null,
@@ -188,9 +194,11 @@ export default function Convert() {
   const [selectionActive, setSelectionActive] = useState(false);
   const [selectedCount, setSelectedCount] = useState(0);
   const [paintActive, setPaintActive] = useState(false);
+  const [moveActive, setMoveActive] = useState(false);
   const [paintColorDisplay, setPaintColorDisplay] = useState<{ bg: string; label: string } | null>(null);
   const [colorReplaceOpen, setColorReplaceOpen] = useState(false);
   const [paintColorOpen, setPaintColorOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [crCurrentBg, setCrCurrentBg] = useState('');
   const [crCurrentId, setCrCurrentId] = useState('');
   const [crCurrentName, setCrCurrentName] = useState('');
@@ -225,7 +233,8 @@ export default function Convert() {
     const canvas = patternCanvasRef.current;
     if (!canvas) return;
     const { grid, palette, paletteIndices, W, H, cellW, cellH } = pd;
-    const keyRows = Math.ceil(paletteIndices.length / 3);
+    const keyCols = paletteIndices.length < 5 ? paletteIndices.length : 3;
+    const keyRows = Math.ceil(paletteIndices.length / keyCols);
     const KEY_SECTION_H = 10 + 16 + 22 + keyRows * 22 + 16;
     const dpr = window.devicePixelRatio || 1;
     const cssW = W * cellW + LABEL_PAD_Y;
@@ -518,6 +527,71 @@ export default function Convert() {
     showToast(`${n} pixel${n !== 1 ? 's' : ''} painted!`);
   }
 
+  function commitMove(dx: number, dy: number) {
+    const pd = r.current.patternData;
+    if (!pd || r.current.selectedPixels.size === 0) return;
+    if (dx === 0 && dy === 0) return;
+    const { grid, palette, paletteIndices, stitchCounts, W, H } = pd;
+    saveUndoState();
+
+    const cells: Array<{ srcX: number; srcY: number; dmcIdx: number }> = [];
+    for (const key of r.current.selectedPixels) {
+      const [sx, sy] = key.split(',').map(Number);
+      cells.push({ srcX: sx, srcY: sy, dmcIdx: grid[sy * W + sx] });
+    }
+
+    for (const c of cells) {
+      const idx = c.srcY * W + c.srcX;
+      const oldDmcIdx = grid[idx];
+      if (oldDmcIdx === WHITE_DMC_IDX) continue;
+      grid[idx] = WHITE_DMC_IDX;
+      stitchCounts.set(oldDmcIdx, (stitchCounts.get(oldDmcIdx) || 1) - 1);
+      stitchCounts.set(WHITE_DMC_IDX, (stitchCounts.get(WHITE_DMC_IDX) || 0) + 1);
+    }
+    if (!paletteIndices.includes(WHITE_DMC_IDX) && (stitchCounts.get(WHITE_DMC_IDX) || 0) > 0) {
+      paletteIndices.push(WHITE_DMC_IDX);
+      palette.push(DMC_WITH_LAB[WHITE_DMC_IDX]);
+    }
+
+    const newSelected = new Set<string>();
+    for (const c of cells) {
+      const tx = c.srcX + dx;
+      const ty = c.srcY + dy;
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+      const idx = ty * W + tx;
+      const oldDmcIdx = grid[idx];
+      newSelected.add(`${tx},${ty}`);
+      if (oldDmcIdx === c.dmcIdx) continue;
+      grid[idx] = c.dmcIdx;
+      if (!paletteIndices.includes(c.dmcIdx)) {
+        paletteIndices.push(c.dmcIdx);
+        palette.push(DMC_WITH_LAB[c.dmcIdx]);
+        stitchCounts.set(c.dmcIdx, 0);
+      }
+      stitchCounts.set(oldDmcIdx, (stitchCounts.get(oldDmcIdx) || 1) - 1);
+      stitchCounts.set(c.dmcIdx, (stitchCounts.get(c.dmcIdx) || 0) + 1);
+    }
+
+    for (let i = paletteIndices.length - 1; i >= 0; i--) {
+      if ((stitchCounts.get(paletteIndices[i]) || 0) <= 0) {
+        stitchCounts.delete(paletteIndices[i]);
+        palette.splice(i, 1);
+        paletteIndices.splice(i, 1);
+      }
+    }
+
+    r.current.selectedPixels = newSelected;
+    setSelectedCount(newSelected.size);
+    if (newSelected.size === 0) {
+      r.current.moveActive = false;
+      setMoveActive(false);
+    }
+    renderCanvas();
+    renderSummary();
+    const n = cells.length;
+    showToast(`Moved ${n} pixel${n !== 1 ? 's' : ''}`);
+  }
+
   // ── Color replace modal helpers ───────────────────────────────────────────────
 
   function openColorReplaceModal(dmcIdx: number, pixel?: { x: number; y: number }) {
@@ -771,7 +845,7 @@ export default function Convert() {
       const cy = Math.floor(canvasY / pd.cellH);
 
       // Crop cursor
-      if (!r.current.paintActive && !r.current.selectionActive && !r.current.cropDragging) {
+      if (!r.current.paintActive && !r.current.selectionActive && !r.current.moveActive && !r.current.cropDragging) {
         const edge = detectCropEdge(canvasX, canvasY);
         const wrapper = document.getElementById('convert-canvas-wrapper');
         if (wrapper) {
@@ -804,6 +878,12 @@ export default function Convert() {
         r.current.selDragEndPx = { x: canvasX, y: canvasY };
         drawRubberBand();
       }
+
+      // Move drag
+      if (r.current.moveDragging && pd) {
+        r.current.moveDragCurrent = { x: canvasX, y: canvasY };
+        drawMovePreview();
+      }
     }
 
     function handleMouseLeave() { tooltip!.style.display = 'none'; }
@@ -829,6 +909,41 @@ export default function Convert() {
       selCtx.lineWidth = 1.5;
       selCtx.setLineDash([4, 3]);
       selCtx.strokeRect(rx + 0.75, ry + 0.75, rw - 1.5, rh - 1.5);
+      selCtx.setLineDash([]);
+      selCtx.restore();
+    }
+
+    function drawMovePreview() {
+      const pd = r.current.patternData;
+      if (!pd || !r.current.moveDragStart || !r.current.moveDragCurrent) return;
+      const { cellW, cellH, W, H, grid, palette, paletteIndices } = pd;
+      const dpr = window.devicePixelRatio || 1;
+      const dxCell = Math.floor(r.current.moveDragCurrent.x / cellW) - Math.floor(r.current.moveDragStart.x / cellW);
+      const dyCell = Math.floor(r.current.moveDragCurrent.y / cellH) - Math.floor(r.current.moveDragStart.y / cellH);
+      const selCtx = selCanvas.getContext('2d')!;
+      selCtx.clearRect(0, 0, selCanvas.width, selCanvas.height);
+      selCtx.save();
+      selCtx.scale(dpr, dpr);
+      const paletteIndexMap = new Map(paletteIndices.map((di, pos) => [di, pos]));
+      for (const key of r.current.selectedPixels) {
+        const [sx, sy] = key.split(',').map(Number);
+        const tx = sx + dxCell, ty = sy + dyCell;
+        if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+        const dmcIdx = grid[sy * W + sx];
+        const dmc = palette[paletteIndexMap.get(dmcIdx)!];
+        if (!dmc) continue;
+        selCtx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
+        selCtx.fillRect(tx * cellW, ty * cellH, cellW, cellH);
+      }
+      selCtx.strokeStyle = 'rgba(99,102,241,0.9)';
+      selCtx.lineWidth = 1.5;
+      selCtx.setLineDash([4, 3]);
+      for (const key of r.current.selectedPixels) {
+        const [sx, sy] = key.split(',').map(Number);
+        const tx = sx + dxCell, ty = sy + dyCell;
+        if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+        selCtx.strokeRect(tx * cellW + 0.75, ty * cellH + 0.75, cellW - 1.5, cellH - 1.5);
+      }
       selCtx.setLineDash([]);
       selCtx.restore();
     }
@@ -863,6 +978,22 @@ export default function Convert() {
         selCanvas.width = canvas.width; selCanvas.height = canvas.height;
         selCanvas.style.width = canvas.style.width; selCanvas.style.height = canvas.style.height;
         selCanvas.style.display = 'block';
+        return;
+      }
+
+      // Move tool
+      if (r.current.moveActive && r.current.selectedPixels.size > 0) {
+        e.preventDefault();
+        r.current.moveDragging = true;
+        r.current.moveDragStart = { x: canvasX, y: canvasY };
+        r.current.moveDragCurrent = { x: canvasX, y: canvasY };
+        selCanvas.width = canvas.width; selCanvas.height = canvas.height;
+        selCanvas.style.width = canvas.style.width; selCanvas.style.height = canvas.style.height;
+        selCanvas.style.left = '0px';
+        selCanvas.style.top = '0px';
+        selCanvas.style.display = 'block';
+        const wrapper = document.getElementById('convert-canvas-wrapper');
+        if (wrapper) wrapper.style.cursor = 'grabbing';
         return;
       }
 
@@ -926,12 +1057,28 @@ export default function Convert() {
         selCanvas.getContext('2d')!.clearRect(0, 0, selCanvas.width, selCanvas.height);
         if (r.current.selDragEndPx) commitAreaSelection();
       }
+      // Move drag
+      if (r.current.moveDragging) {
+        r.current.moveDragging = false;
+        selCanvas.style.display = 'none';
+        selCanvas.getContext('2d')!.clearRect(0, 0, selCanvas.width, selCanvas.height);
+        const pd = r.current.patternData;
+        if (pd && r.current.moveDragStart && r.current.moveDragCurrent) {
+          const dx = Math.floor(r.current.moveDragCurrent.x / pd.cellW) - Math.floor(r.current.moveDragStart.x / pd.cellW);
+          const dy = Math.floor(r.current.moveDragCurrent.y / pd.cellH) - Math.floor(r.current.moveDragStart.y / pd.cellH);
+          if (dx !== 0 || dy !== 0) commitMove(dx, dy);
+        }
+        r.current.moveDragStart = null;
+        r.current.moveDragCurrent = null;
+        const wrapper = document.getElementById('convert-canvas-wrapper');
+        if (wrapper) wrapper.style.cursor = r.current.moveActive ? 'grab' : 'pointer';
+      }
     }
 
     function handleClick(e: MouseEvent) {
       if (r.current.suppressNextClick) { r.current.suppressNextClick = false; return; }
       if (!r.current.patternData) return;
-      if (r.current.paintActive || r.current.selectionActive) return;
+      if (r.current.paintActive || r.current.selectionActive || r.current.moveActive) return;
       const { x: canvasX, y: canvasY } = clientToCanvas(e);
       const pd = r.current.patternData!;
       const cx = Math.floor(canvasX / pd.cellW);
@@ -1071,42 +1218,18 @@ export default function Convert() {
   function handleExportPNG() {
     const canvas = patternCanvasRef.current;
     if (!canvas?.width || !r.current.patternData) { showToast('Generate a pattern first.'); return; }
-    const { palette, paletteIndices, stitchCounts } = r.current.patternData;
-    const LEGEND_ROW_H = 28, LEGEND_PADDING = 40, TITLE_H = 60;
-    const totalLegendH = LEGEND_PADDING + palette.length * LEGEND_ROW_H + 30;
-    const exportH = TITLE_H + canvas.height + totalLegendH;
-    const exportW = Math.max(canvas.width + 80, 600);
+    const MARGIN = 24;
     const exp = document.createElement('canvas');
-    exp.width = exportW; exp.height = exportH;
+    exp.width = canvas.width + MARGIN * 2;
+    exp.height = canvas.height + MARGIN * 2;
     const ctx = exp.getContext('2d')!;
-    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, exportW, exportH);
-    ctx.fillStyle = '#C49270'; ctx.font = 'bold 22px Inter,sans-serif';
-    ctx.fillText('KnitMate Pattern', 40, 40);
-    ctx.drawImage(canvas, 40, TITLE_H);
-    let ly = TITLE_H + canvas.height + 30;
-    ctx.fillStyle = '#C49270'; ctx.font = 'bold 16px Inter,sans-serif';
-    ctx.fillText('DMC Thread Legend', 40, ly); ly += 24;
-    ctx.font = '12px Inter,sans-serif'; ctx.fillStyle = '#9B9C8A';
-    ctx.fillText('No.', 40, ly); ctx.fillText('DMC', 90, ly);
-    ctx.fillText('Color Name', 160, ly);
-    ctx.fillText('Stitches', exportW - 90, ly); ly += 6;
-    ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(40, ly); ctx.lineTo(exportW - 40, ly); ctx.stroke(); ly += 10;
-    const sorted = paletteIndices.map((dmcIdx, pos) => ({ dmc: palette[pos], count: stitchCounts.get(dmcIdx) || 0 }))
-      .sort((a, b) => b.count - a.count);
-    sorted.forEach(({ dmc, count }, i) => {
-      const rowY = ly + i * LEGEND_ROW_H;
-      ctx.fillStyle = `rgb(${dmc.r},${dmc.g},${dmc.b})`;
-      ctx.fillRect(40, rowY - 14, 18, 18);
-      ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1; ctx.strokeRect(40, rowY - 14, 18, 18);
-      ctx.fillStyle = '#C49270'; ctx.font = 'bold 12px Inter,sans-serif'; ctx.fillText(dmc.id, 70, rowY);
-      ctx.font = '12px Inter,sans-serif'; ctx.fillText(dmc.name, 140, rowY);
-      ctx.textAlign = 'right';
-      ctx.fillText(count.toLocaleString(), exportW - 40, rowY);
-      ctx.textAlign = 'left';
-    });
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, exp.width, exp.height);
+    ctx.drawImage(canvas, MARGIN, MARGIN);
     const link = document.createElement('a');
-    link.download = 'knitmate-pattern.png'; link.href = exp.toDataURL('image/png'); link.click();
+    link.download = 'knitmate-pattern.png';
+    link.href = exp.toDataURL('image/png');
+    link.click();
     showToast('PNG downloaded!');
   }
 
@@ -1184,6 +1307,60 @@ export default function Convert() {
       .slice(0, 150);
   }
 
+  // ── Row-by-row instructions ──────────────────────────────────────────────────
+
+  function generateRowInstructions() {
+    const pd = r.current.patternData;
+    if (!pd) return [];
+    const { grid, palette, paletteIndices, W, H } = pd;
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const paletteIndexMap = new Map(paletteIndices.map((di, pos) => [di, pos]));
+
+    type Segment = { count: number; name: string; id: string; letter: string; bg: string };
+    type Row = { row: number; isOdd: boolean; segments: Segment[] };
+    const rows: Row[] = [];
+
+    // Row R (1-indexed, bottom up) maps to grid y = H - R.
+    for (let row = 1; row <= H; row++) {
+      const y = H - row;
+      const isOdd = row % 2 === 1;
+      // Odd: read right→left (grid x: W-1 → 0). Even: read left→right (grid x: 0 → W-1).
+      const xStart = isOdd ? W - 1 : 0;
+      const xEnd = isOdd ? -1 : W;
+      const xStep = isOdd ? -1 : 1;
+
+      const segments: Segment[] = [];
+      let curr = -1;
+      let count = 0;
+      const flush = () => {
+        if (count === 0) return;
+        const pos = paletteIndexMap.get(curr);
+        if (pos === undefined) return;
+        const dmc = palette[pos];
+        segments.push({
+          count,
+          name: dmc.name,
+          id: dmc.id,
+          letter: letters[pos] ?? String(pos + 1),
+          bg: `rgb(${dmc.r},${dmc.g},${dmc.b})`,
+        });
+      };
+      for (let x = xStart; x !== xEnd; x += xStep) {
+        const dmcIdx = grid[y * W + x];
+        if (dmcIdx === curr) {
+          count++;
+        } else {
+          flush();
+          curr = dmcIdx;
+          count = 1;
+        }
+      }
+      flush();
+      rows.push({ row, isOdd, segments });
+    }
+    return rows;
+  }
+
   function handleCrSelect(dmcIdx: number) {
     if (r.current.colorReplacePixel) replaceSinglePixel(r.current.colorReplacePixel.x, r.current.colorReplacePixel.y, dmcIdx);
     else if (r.current.colorReplaceScope === 'selection') paintSelectedPixels(dmcIdx);
@@ -1195,6 +1372,25 @@ export default function Convert() {
 
   const { palette: crPalette, rest: crRest } = colorReplaceOpen ? crFilteredColors() : { palette: [], rest: [] };
   const pcColors = paintColorOpen ? pcFilteredColors() : [];
+  const instructionsRows = instructionsOpen ? generateRowInstructions() : [];
+
+  function closeInstructions() {
+    setInstructionsOpen(false);
+    document.body.style.overflow = '';
+  }
+
+  function handleCopyInstructions() {
+    const lines = instructionsRows.map(({ row, isOdd, segments }) => {
+      const dirLabel = isOdd ? 'knit row, read right → left' : 'purl row, read left → right';
+      const verb = isOdd ? 'Knit' : 'Purl';
+      const segText = segments.map(s => `${verb} ${s.count} in ${s.name} (${s.letter})`).join(' → ');
+      return `Row ${row} (${dirLabel})\n${segText}.`;
+    });
+    navigator.clipboard.writeText(lines.join('\n\n')).then(
+      () => showToast('Instructions copied!'),
+      () => showToast('Could not copy to clipboard.')
+    );
+  }
 
   return (
     <div className="w-full min-h-screen text-warm antialiased overflow-x-hidden" style={{ background: '#FAF7F4' }}>
@@ -1322,6 +1518,66 @@ export default function Convert() {
             <div className="p-4 border-t border-gray-100">
               <button onClick={() => { setPaintColorOpen(false); document.body.style.overflow = ''; }}
                 className="w-full py-2 text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Row Instructions Modal */}
+      {instructionsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) closeInstructions(); }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '85vh' }}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-brand-dark">Row-by-Row Instructions</h3>
+                <p className="text-xs text-brand-gray mt-0.5">
+                  Odd rows: knit, read right → left. Even rows: purl, read left → right.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={handleCopyInstructions}
+                  className="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
+                  <i className="fa-solid fa-copy" /> Copy
+                </button>
+                <button onClick={closeInstructions}
+                  className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-brand-darker hover:bg-brand-light hover:border-brand-light transition-all">
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-3">
+              {instructionsRows.length === 0 ? (
+                <p className="text-sm text-brand-gray text-center py-8">No pattern data.</p>
+              ) : (
+                instructionsRows.map(({ row, isOdd, segments }) => {
+                  const verb = isOdd ? 'Knit' : 'Purl';
+                  const dirLabel = isOdd ? 'knit row, read right → left' : 'purl row, read left → right';
+                  return (
+                    <div key={row} className={`py-3 ${row !== instructionsRows.length ? 'border-b border-gray-100' : ''}`}>
+                      <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-brand-dark">Row {row}</span>
+                        <span className="text-xs text-brand-gray">({dirLabel})</span>
+                      </div>
+                      <div className="text-sm text-brand-darker leading-relaxed flex flex-wrap items-center gap-x-1 gap-y-1.5">
+                        {segments.map((s, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 whitespace-nowrap">
+                            {i > 0 && <span className="text-brand-gray mx-1">→</span>}
+                            <strong>{verb} {s.count}</strong>
+                            <span>in</span>
+                            <span style={{ width: 12, height: 12, borderRadius: 3, background: s.bg, border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block', flexShrink: 0 }} />
+                            <span>{s.name} ({s.letter})</span>
+                          </span>
+                        ))}
+                        <span>.</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100">
+              <button onClick={closeInstructions}
+                className="w-full py-2 text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Close</button>
             </div>
           </div>
         </div>
@@ -1481,6 +1737,9 @@ export default function Convert() {
                   setSelectionActive(next);
                   const wrapper = document.getElementById('convert-canvas-wrapper');
                   if (wrapper) wrapper.style.cursor = next ? 'crosshair' : 'pointer';
+                  if (next) {
+                    if (r.current.moveActive) { r.current.moveActive = false; setMoveActive(false); }
+                  }
                   if (!next) {
                     r.current.selectedPixels.clear();
                     setSelectedCount(0);
@@ -1513,6 +1772,7 @@ export default function Convert() {
                       if (selectionCanvasRef.current) selectionCanvasRef.current.style.display = 'none';
                       if (r.current.patternData) renderCanvas();
                     }
+                    if (r.current.moveActive) { r.current.moveActive = false; setMoveActive(false); }
                   } else {
                     if (wrapper) wrapper.style.cursor = 'pointer';
                   }
@@ -1539,6 +1799,16 @@ export default function Convert() {
                 <i className="fa-solid fa-magnifying-glass-plus text-xs" />
               </button>
               <div className="w-px h-6 bg-gray-200" />
+              <button
+                onClick={() => {
+                  if (!r.current.patternData) { showToast('Generate a pattern first.'); return; }
+                  setInstructionsOpen(true);
+                  document.body.style.overflow = 'hidden';
+                }}
+                title="Row-by-row stitch instructions"
+                className="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
+                <i className="fa-solid fa-list-ol" /> Instructions
+              </button>
               <button onClick={handleExportPNG} className="bg-white border border-gray-200 text-brand-darker text-xs font-semibold px-3 py-2 rounded-lg hover:border-brand-dark transition-all flex items-center gap-1.5">
                 <i className="fa-solid fa-image" /> PNG
               </button>
@@ -1643,8 +1913,36 @@ export default function Convert() {
                 </button>
                 <button
                   onClick={() => {
+                    const next = !r.current.moveActive;
+                    r.current.moveActive = next;
+                    setMoveActive(next);
+                    const wrapper = document.getElementById('convert-canvas-wrapper');
+                    if (wrapper) wrapper.style.cursor = next ? 'grab' : 'pointer';
+                    if (next) {
+                      if (r.current.selectionActive) {
+                        r.current.selectionActive = false;
+                        setSelectionActive(false);
+                      }
+                      if (r.current.paintActive) {
+                        r.current.paintActive = false;
+                        setPaintActive(false);
+                      }
+                    }
+                  }}
+                  title="Drag the selected area to move it"
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${moveActive ? 'bg-brand-dark text-white' : 'border border-gray-200 text-brand-dark hover:border-brand-dark'}`}>
+                  <i className="fa-solid fa-arrows-up-down-left-right text-xs" /> {moveActive ? 'Drag to move' : 'Move'}
+                </button>
+                <button
+                  onClick={() => {
                     r.current.selectedPixels.clear();
                     setSelectedCount(0);
+                    if (r.current.moveActive) {
+                      r.current.moveActive = false;
+                      setMoveActive(false);
+                      const wrapper = document.getElementById('convert-canvas-wrapper');
+                      if (wrapper) wrapper.style.cursor = 'pointer';
+                    }
                     if (r.current.patternData) renderCanvas();
                   }}
                   className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-brand-gray hover:border-brand-dark hover:text-brand-dark transition-all">
